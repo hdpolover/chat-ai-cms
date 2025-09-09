@@ -75,7 +75,8 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-uploads/
+uploads/*
+!uploads/.gitkeep
 logs/
 *.log
 
