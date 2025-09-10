@@ -50,6 +50,14 @@ class ChatService:
             api_messages.append({"role": msg.role, "content": msg.content})
         
         try:
+            # Log the API call details
+            logger.info(
+                "Making OpenAI API call",
+                model=bot.model,
+                message_count=len(api_messages),
+                api_key_prefix=openai_client.api_key[:20] + "..." if openai_client.api_key else "None"
+            )
+            
             # Call OpenAI API
             response = await openai_client.chat.completions.create(
                 model=bot.model,
@@ -75,6 +83,19 @@ class ChatService:
             )
             
             return ChatMessage(role="assistant", content=assistant_message), usage
+            
+        except openai.RateLimitError as e:
+            # Log the actual OpenAI error and re-raise to see it
+            logger.error("OpenAI RateLimitError", error=str(e), full_error=repr(e))
+            raise
+        except openai.AuthenticationError as e:
+            # Log authentication errors
+            logger.error("OpenAI AuthenticationError", error=str(e), full_error=repr(e))
+            raise
+        except openai.APIError as e:
+            # Log other API errors
+            logger.error("OpenAI APIError", error=str(e), full_error=repr(e))
+            raise
             
         except Exception as e:
             logger.error("Failed to generate response", error=str(e), bot_id=bot.id)

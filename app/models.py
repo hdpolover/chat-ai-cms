@@ -38,7 +38,33 @@ class Tenant(Base):
 
     # Relationships
     bots: Mapped[List["Bot"]] = relationship("Bot", back_populates="tenant", cascade="all, delete-orphan")
+    ai_providers: Mapped[List["AIProvider"]] = relationship("AIProvider", back_populates="tenant", cascade="all, delete-orphan")
     api_keys: Mapped[List["APIKey"]] = relationship("APIKey", back_populates="tenant", cascade="all, delete-orphan")
+
+
+class AIProvider(Base):
+    """AI Provider model for multiple AI service configurations."""
+    __tablename__ = "ai_providers"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=False)
+    provider_name: Mapped[str] = mapped_column(String(50), nullable=False)  # openai, anthropic, google, etc.
+    api_key: Mapped[str] = mapped_column(Text, nullable=False)
+    base_url: Mapped[Optional[str]] = mapped_column(String(255))  # Custom endpoint URLs
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)  # Provider-specific settings
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="ai_providers")
+    bots: Mapped[List["Bot"]] = relationship("Bot", back_populates="ai_provider")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "provider_name", name="uq_tenant_provider"),
+        Index("idx_ai_provider_tenant", "tenant_id"),
+        Index("idx_ai_provider_name", "provider_name"),
+    )
 
 
 class Bot(Base):
@@ -47,6 +73,7 @@ class Bot(Base):
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     tenant_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=False)
+    ai_provider_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False), ForeignKey("ai_providers.id"))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     system_prompt: Mapped[Optional[str]] = mapped_column(Text)
@@ -60,6 +87,7 @@ class Bot(Base):
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="bots")
+    ai_provider: Mapped[Optional["AIProvider"]] = relationship("AIProvider", back_populates="bots")
     scopes: Mapped[List["Scope"]] = relationship("Scope", back_populates="bot", cascade="all, delete-orphan")
     conversations: Mapped[List["Conversation"]] = relationship("Conversation", back_populates="bot", cascade="all, delete-orphan")
 
