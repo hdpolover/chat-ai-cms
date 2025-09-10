@@ -9,7 +9,7 @@ export const API_CONFIG = {
       LOGIN: '/admin/auth/login',
       LOGOUT: '/admin/auth/logout',
       REFRESH: '/admin/auth/refresh',
-      PROFILE: '/admin/auth/profile',
+      PROFILE: '/admin/auth/me',
     },
     TENANTS: {
       LIST: '/admin/tenants',

@@ -9,17 +9,17 @@ import type {
 
 export class AuthService {
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
+    const response = await apiClient.post<AuthResponse>(
       API_CONFIG.ENDPOINTS.AUTH.LOGIN,
       credentials
     );
     
-    const { access_token, refresh_token, user } = response.data.data;
+    const { access_token, user } = response.data;
     
-    // Store tokens
-    apiClient.setTokens(access_token, refresh_token);
+    // Store tokens (no refresh_token from backend yet)
+    apiClient.setTokens(access_token, null);
     
-    return response.data.data;
+    return response.data;
   }
 
   async logout(): Promise<void> {
@@ -32,21 +32,21 @@ export class AuthService {
   }
 
   async refreshToken(): Promise<AuthResponse> {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
+    const response = await apiClient.post<AuthResponse>(
       API_CONFIG.ENDPOINTS.AUTH.REFRESH
     );
     
-    const { access_token, refresh_token } = response.data.data;
-    apiClient.setTokens(access_token, refresh_token);
+    const { access_token } = response.data;
+    apiClient.setTokens(access_token);
     
-    return response.data.data;
+    return response.data;
   }
 
   async getProfile(): Promise<User> {
-    const response = await apiClient.get<ApiResponse<User>>(
+    const response = await apiClient.get<User>(
       API_CONFIG.ENDPOINTS.AUTH.PROFILE
     );
-    return response.data.data;
+    return response.data;
   }
 
   isAuthenticated(): boolean {

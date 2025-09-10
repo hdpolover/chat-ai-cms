@@ -70,9 +70,11 @@ class ApiClient {
     Cookies.remove(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY);
   }
 
-  public setTokens(accessToken: string, refreshToken: string) {
+  public setTokens(accessToken: string, refreshToken?: string | null) {
     Cookies.set(APP_CONFIG.TOKEN_STORAGE_KEY, accessToken);
-    Cookies.set(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+    if (refreshToken) {
+      Cookies.set(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+    }
   }
 
   public async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
