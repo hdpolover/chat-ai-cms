@@ -50,7 +50,13 @@ export class AuthService {
   }
 
   isAuthenticated(): boolean {
-    // Check if we have a token in cookies
+    // This should be used carefully to avoid hydration issues
+    // Return false during SSR, true check happens on client side
+    return false;
+  }
+
+  // Client-side only authentication check
+  isAuthenticatedClient(): boolean {
     if (typeof window === 'undefined') return false;
     
     const token = document.cookie

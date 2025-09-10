@@ -13,7 +13,7 @@ from ...models import AdminUser, Tenant, Bot, Conversation, Message, SystemSetti
 from .auth import get_current_admin_user
 from typing import Dict, Any
 
-router = APIRouter(prefix="/admin", tags=["admin-dashboard"])
+router = APIRouter(prefix="/admin", tags=["Admin - Dashboard"])
 
 
 # Pydantic models

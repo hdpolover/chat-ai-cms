@@ -5,7 +5,7 @@ import openai
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import AIProvider, Bot
+from ..models import TenantAIProvider, Bot
 from ..schemas import ChatMessage, TokenUsage
 
 logger = structlog.get_logger()
@@ -17,13 +17,13 @@ class AIProviderService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_client(self, ai_provider: AIProvider):
+    async def get_client(self, ai_provider: TenantAIProvider):
         """Get the appropriate AI client based on provider."""
         if ai_provider.provider_name == "openai":
             return openai.AsyncOpenAI(
                 api_key=ai_provider.api_key,
                 base_url=ai_provider.base_url,
-                organization=ai_provider.settings.get("organization")
+                organization=ai_provider.custom_settings.get("organization")
             )
         elif ai_provider.provider_name == "anthropic":
             # TODO: Implement Anthropic client
@@ -126,7 +126,7 @@ class AIProviderService:
             raise
 
     async def _generate_openai_response(
-        self, client: openai.AsyncOpenAI, bot: Bot, api_messages: List[Dict], ai_provider: AIProvider
+        self, client: openai.AsyncOpenAI, bot: Bot, api_messages: List[Dict], ai_provider: TenantAIProvider
     ) -> tuple[ChatMessage, TokenUsage]:
         """Generate response using OpenAI."""
         logger.info(
@@ -140,7 +140,7 @@ class AIProviderService:
             model=bot.model,
             messages=api_messages,
             temperature=bot.temperature,
-            max_tokens=bot.max_tokens or ai_provider.settings.get("max_tokens", 4000),
+            max_tokens=bot.max_tokens or ai_provider.custom_settings.get("max_tokens", 4000),
         )
 
         assistant_message = response.choices[0].message.content
@@ -162,7 +162,7 @@ class AIProviderService:
         return ChatMessage(role="assistant", content=assistant_message), usage
 
     async def _generate_openai_stream(
-        self, client: openai.AsyncOpenAI, bot: Bot, api_messages: List[Dict], ai_provider: AIProvider
+        self, client: openai.AsyncOpenAI, bot: Bot, api_messages: List[Dict], ai_provider: TenantAIProvider
     ):
         """Generate streaming response using OpenAI."""
         from .chat_service import ChatStreamChunk
@@ -178,7 +178,7 @@ class AIProviderService:
             model=bot.model,
             messages=api_messages,
             temperature=bot.temperature,
-            max_tokens=bot.max_tokens or ai_provider.settings.get("max_tokens", 4000),
+            max_tokens=bot.max_tokens or ai_provider.custom_settings.get("max_tokens", 4000),
             stream=True,
         )
 

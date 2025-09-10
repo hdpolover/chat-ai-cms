@@ -1,8 +1,6 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: typeof window !== 'undefined' && window.location ? 
-    (window.location.protocol === 'https:' ? 'https://api.yourdomain.com' : 'http://localhost:8000') :
-    'http://localhost:8000',
+  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   TIMEOUT: 30000,
   ENDPOINTS: {
     AUTH: {

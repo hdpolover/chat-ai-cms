@@ -15,7 +15,7 @@ from ..services.ai_provider_service import AIProviderService
 from ..services.chat_service import ChatService
 from ..services.retrieval_service import RetrievalService
 
-router = APIRouter()
+router = APIRouter(tags=["Chat"])
 logger = structlog.get_logger()
 
 

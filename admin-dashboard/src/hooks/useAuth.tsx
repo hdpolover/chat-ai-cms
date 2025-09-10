@@ -21,16 +21,24 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
 
-  const isAuthenticated = !!user && authService.isAuthenticated();
+  // Track client-side hydration
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const isAuthenticated = !!user && isClient && authService.isAuthenticatedClient();
 
   useEffect(() => {
-    initializeAuth();
-  }, []);
+    if (isClient) {
+      initializeAuth();
+    }
+  }, [isClient]);
 
   const initializeAuth = async () => {
     try {
-      if (authService.isAuthenticated()) {
+      if (authService.isAuthenticatedClient()) {
         const userData = await authService.getProfile();
         setUser(userData);
       }

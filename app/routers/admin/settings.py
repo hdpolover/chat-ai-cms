@@ -11,7 +11,7 @@ from ...db import get_sync_db
 from ...models import SystemSettings, GlobalAIProvider
 from .auth import get_current_admin_user, AdminUser
 
-router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
+router = APIRouter(prefix="/admin/settings", tags=["Admin - Settings"])
 
 # Schemas
 class SystemSettingResponse(BaseModel):

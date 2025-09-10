@@ -17,6 +17,7 @@ import {
   Switch,
   Typography,
   Divider,
+  Alert,
 } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,15 +27,18 @@ import { tenantService } from '@/services/tenant';
 import type { Tenant, TenantFormData } from '@/types';
 
 const tenantSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name must be less than 100 characters'),
+  name: z.string().min(1, 'Name is required').max(255, 'Name must be less than 255 characters'),
   slug: z.string()
     .min(1, 'Slug is required')
-    .max(50, 'Slug must be less than 50 characters')
+    .max(100, 'Slug must be less than 100 characters')
     .regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens'),
   description: z.string().optional(),
-  owner_email: z.string().email('Please enter a valid email address'),
+  owner_email: z.string().email('Please enter a valid email address').optional().or(z.literal('')),
   plan: z.enum(['free', 'pro', 'enterprise']),
   is_active: z.boolean(),
+  global_rate_limit: z.number().min(1).max(10000).optional(),
+  settings: z.record(z.any()).optional(),
+  feature_flags: z.record(z.any()).optional(),
 });
 
 interface TenantDialogProps {
@@ -53,6 +57,7 @@ export default function TenantDialog({
   onSuccess,
 }: TenantDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
     register,
@@ -70,14 +75,21 @@ export default function TenantDialog({
       owner_email: '',
       plan: 'free',
       is_active: true,
+      global_rate_limit: 1000,
+      settings: {},
+      feature_flags: {},
     },
   });
 
   const createMutation = useMutation({
     mutationFn: tenantService.createTenant,
     onSuccess: () => {
+      setSubmitError(null);
       onSuccess();
       reset();
+    },
+    onError: (error: any) => {
+      setSubmitError(error.response?.data?.message || error.message || 'Failed to create tenant');
     },
   });
 
@@ -85,7 +97,11 @@ export default function TenantDialog({
     mutationFn: ({ id, data }: { id: string; data: Partial<TenantFormData> }) =>
       tenantService.updateTenant(id, data),
     onSuccess: () => {
+      setSubmitError(null);
       onSuccess();
+    },
+    onError: (error: any) => {
+      setSubmitError(error.response?.data?.message || error.message || 'Failed to update tenant');
     },
   });
 
@@ -94,16 +110,22 @@ export default function TenantDialog({
       setValue('name', tenant.name);
       setValue('slug', tenant.slug);
       setValue('description', tenant.description || '');
-      setValue('owner_email', tenant.owner_email);
+      setValue('owner_email', tenant.owner_email || '');
       setValue('plan', tenant.plan);
       setValue('is_active', tenant.is_active);
+      setValue('global_rate_limit', tenant.global_rate_limit || 1000);
+      setValue('settings', tenant.settings || {});
+      setValue('feature_flags', tenant.feature_flags || {});
     } else {
       reset();
     }
-  }, [tenant, mode, setValue, reset]);
+    // Clear any previous errors when dialog opens/closes
+    setSubmitError(null);
+  }, [tenant, mode, setValue, reset, open]);
 
   const onSubmit = async (data: TenantFormData) => {
     setIsLoading(true);
+    setSubmitError(null);
     try {
       if (mode === 'create') {
         await createMutation.mutateAsync(data);
@@ -111,6 +133,7 @@ export default function TenantDialog({
         await updateMutation.mutateAsync({ id: tenant.id, data });
       }
     } catch (error) {
+      // Error is handled by mutation onError callbacks
       console.error('Form submission failed:', error);
     } finally {
       setIsLoading(false);
@@ -153,6 +176,11 @@ export default function TenantDialog({
       <DialogTitle>{getDialogTitle()}</DialogTitle>
       
       <DialogContent>
+        {submitError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {submitError}
+          </Alert>
+        )}
         <Box component="form" sx={{ mt: 2 }}>
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
@@ -218,6 +246,19 @@ export default function TenantDialog({
               </FormControl>
             </Grid>
             
+            <Grid item xs={12} md={6}>
+              <TextField
+                {...register('global_rate_limit', { valueAsNumber: true })}
+                fullWidth
+                label="Global Rate Limit"
+                type="number"
+                InputProps={{ inputProps: { min: 1, max: 10000 } }}
+                error={!!errors.global_rate_limit}
+                helperText={errors.global_rate_limit?.message || 'API requests per hour'}
+                disabled={isReadOnly}
+              />
+            </Grid>
+            
             <Grid item xs={12}>
               <FormControlLabel
                 control={
@@ -230,6 +271,57 @@ export default function TenantDialog({
                 label="Active"
               />
             </Grid>
+            
+            {!isReadOnly && (
+              <>
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 1 }} />
+                  <Typography variant="h6" gutterBottom>
+                    Advanced Configuration
+                  </Typography>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Settings (JSON)"
+                    multiline
+                    rows={4}
+                    value={JSON.stringify(watch('settings') || {}, null, 2)}
+                    onChange={(e) => {
+                      try {
+                        const parsed = JSON.parse(e.target.value);
+                        setValue('settings', parsed);
+                      } catch (error) {
+                        // Invalid JSON - user is still typing
+                      }
+                    }}
+                    helperText="JSON object for tenant-specific settings"
+                    disabled={isReadOnly}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Feature Flags (JSON)"
+                    multiline
+                    rows={4}
+                    value={JSON.stringify(watch('feature_flags') || {}, null, 2)}
+                    onChange={(e) => {
+                      try {
+                        const parsed = JSON.parse(e.target.value);
+                        setValue('feature_flags', parsed);
+                      } catch (error) {
+                        // Invalid JSON - user is still typing
+                      }
+                    }}
+                    helperText="JSON object for feature toggles"
+                    disabled={isReadOnly}
+                  />
+                </Grid>
+              </>
+            )}
 
             {mode === 'view' && tenant && (
               <>

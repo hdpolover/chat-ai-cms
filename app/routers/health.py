@@ -9,7 +9,7 @@ from ..db import async_engine
 from ..deps import redis_client
 from ..schemas import HealthResponse
 
-router = APIRouter()
+router = APIRouter(tags=["Health"])
 
 
 @router.get("/v1/health", response_model=HealthResponse)

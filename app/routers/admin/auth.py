@@ -16,7 +16,7 @@ from ...models import AdminUser
 from jose import JWTError, jwt
 import os
 
-router = APIRouter(prefix="/admin/auth", tags=["admin-auth"])
+router = APIRouter(prefix="/admin/auth", tags=["Admin - Authentication"])
 
 # Security
 security = HTTPBearer()

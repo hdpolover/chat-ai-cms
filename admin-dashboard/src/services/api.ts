@@ -21,9 +21,12 @@ class ApiClient {
     // Request interceptor to add auth token
     this.client.interceptors.request.use(
       (config) => {
-        const token = Cookies.get(APP_CONFIG.TOKEN_STORAGE_KEY);
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+        // Only access cookies on client side
+        if (typeof window !== 'undefined') {
+          const token = Cookies.get(APP_CONFIG.TOKEN_STORAGE_KEY);
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
         }
         return config;
       },
@@ -40,23 +43,27 @@ class ApiClient {
           original._retry = true;
           
           try {
-            const refreshToken = Cookies.get(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY);
-            if (refreshToken) {
-              const response = await axios.post('/admin/auth/refresh', {
-                refresh_token: refreshToken,
-              });
-              
-              const { access_token } = response.data;
-              Cookies.set(APP_CONFIG.TOKEN_STORAGE_KEY, access_token);
-              
-              // Retry original request with new token
-              original.headers.Authorization = `Bearer ${access_token}`;
-              return this.client(original);
+            if (typeof window !== 'undefined') {
+              const refreshToken = Cookies.get(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY);
+              if (refreshToken) {
+                const response = await axios.post('/admin/auth/refresh', {
+                  refresh_token: refreshToken,
+                });
+                
+                const { access_token } = response.data;
+                Cookies.set(APP_CONFIG.TOKEN_STORAGE_KEY, access_token);
+                
+                // Retry original request with new token
+                original.headers.Authorization = `Bearer ${access_token}`;
+                return this.client(original);
+              }
             }
           } catch (refreshError) {
             // Refresh failed, redirect to login
             this.clearTokens();
-            window.location.href = '/login';
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
           }
         }
         
@@ -66,14 +73,18 @@ class ApiClient {
   }
 
   public clearTokens() {
-    Cookies.remove(APP_CONFIG.TOKEN_STORAGE_KEY);
-    Cookies.remove(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+      Cookies.remove(APP_CONFIG.TOKEN_STORAGE_KEY);
+      Cookies.remove(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY);
+    }
   }
 
   public setTokens(accessToken: string, refreshToken?: string | null) {
-    Cookies.set(APP_CONFIG.TOKEN_STORAGE_KEY, accessToken);
-    if (refreshToken) {
-      Cookies.set(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+    if (typeof window !== 'undefined') {
+      Cookies.set(APP_CONFIG.TOKEN_STORAGE_KEY, accessToken);
+      if (refreshToken) {
+        Cookies.set(APP_CONFIG.REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+      }
     }
   }
 

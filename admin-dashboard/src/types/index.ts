@@ -18,6 +18,10 @@ export interface Tenant {
   updated_at: string;
   owner_email: string;
   plan: 'free' | 'pro' | 'enterprise';
+  settings?: Record<string, any>;
+  global_rate_limit?: number;
+  feature_flags?: Record<string, any>;
+  last_activity?: string;
   usage_stats?: TenantUsageStats;
 }
 
@@ -97,6 +101,9 @@ export interface TenantFormData {
   owner_email: string;
   plan: 'free' | 'pro' | 'enterprise';
   is_active: boolean;
+  settings?: Record<string, any>;
+  global_rate_limit?: number;
+  feature_flags?: Record<string, any>;
 }
 
 export interface SystemSettingsFormData {

@@ -21,6 +21,11 @@ import {
   Menu,
   MenuItem,
   Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import {
   Search,
@@ -47,6 +52,15 @@ export default function TenantList() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit' | 'view'>('create');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const queryClient = useQueryClient();
 
@@ -70,14 +84,38 @@ export default function TenantList() {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       setDeleteDialogOpen(false);
       setSelectedTenant(null);
+      setNotification({
+        open: true,
+        message: 'Tenant deleted successfully',
+        severity: 'success',
+      });
+    },
+    onError: (error: any) => {
+      setNotification({
+        open: true,
+        message: error.response?.data?.message || 'Failed to delete tenant',
+        severity: 'error',
+      });
     },
   });
 
   const toggleStatusMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
       tenantService.toggleTenantStatus(id, is_active),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      setNotification({
+        open: true,
+        message: `Tenant ${variables.is_active ? 'activated' : 'deactivated'} successfully`,
+        severity: 'success',
+      });
+    },
+    onError: (error: any) => {
+      setNotification({
+        open: true,
+        message: error.response?.data?.message || 'Failed to update tenant status',
+        severity: 'error',
+      });
     },
   });
 
@@ -208,9 +246,45 @@ export default function TenantList() {
               </TableHead>
               <TableBody>
                 {isLoading ? (
+                  <>
+                    {Array.from({ length: rowsPerPage }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Box>
+                            <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
+                            <Box sx={{ height: 16, bgcolor: 'grey.100', borderRadius: 1, width: '60%' }} />
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, width: '80%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ height: 24, bgcolor: 'grey.200', borderRadius: 12, width: 60 }} />
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ height: 24, bgcolor: 'grey.200', borderRadius: 12, width: 60 }} />
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, width: '70%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
+                            <Box sx={{ height: 16, bgcolor: 'grey.100', borderRadius: 1, width: '60%' }} />
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ height: 32, bgcolor: 'grey.200', borderRadius: 1, width: 32 }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                ) : error ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center">
-                      Loading...
+                      <Alert severity="error" sx={{ m: 2 }}>
+                        Failed to load tenants. Please try again.
+                      </Alert>
                     </TableCell>
                   </TableRow>
                 ) : tenants.length === 0 ? (
@@ -304,8 +378,13 @@ export default function TenantList() {
           <Edit fontSize="small" sx={{ mr: 1 }} />
           Edit
         </MenuItem>
-        <MenuItem onClick={handleToggleStatus}>
-          {selectedTenant?.is_active ? (
+        <MenuItem 
+          onClick={handleToggleStatus}
+          disabled={toggleStatusMutation.isPending}
+        >
+          {toggleStatusMutation.isPending ? (
+            <>Loading...</>
+          ) : selectedTenant?.is_active ? (
             <><Pause fontSize="small" sx={{ mr: 1 }} />Deactivate</>
           ) : (
             <><PlayArrow fontSize="small" sx={{ mr: 1 }} />Activate</>
@@ -330,9 +409,65 @@ export default function TenantList() {
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
       >
-        {/* Delete confirmation content would go here */}
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Delete color="error" />
+            Confirm Deletion
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom>
+            Are you sure you want to delete the tenant "{selectedTenant?.name}"?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Slug: {selectedTenant?.slug}
+          </Typography>
+          <Typography variant="body2" color="error.main" sx={{ mt: 2 }}>
+            This action cannot be undone. All associated data, including bots, conversations, 
+            and documents will be permanently deleted.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={deleteMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (selectedTenant) {
+                deleteMutation.mutate(selectedTenant.id);
+              }
+            }}
+            color="error"
+            variant="contained"
+            disabled={deleteMutation.isPending}
+            startIcon={deleteMutation.isPending ? null : <Delete />}
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete Tenant'}
+          </Button>
+        </DialogActions>
       </Dialog>
+
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

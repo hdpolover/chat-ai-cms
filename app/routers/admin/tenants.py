@@ -6,14 +6,14 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, desc, asc
+from sqlalchemy import select, func, desc, asc, Integer
 from sqlalchemy.orm import Session
 
 from ...db import get_sync_db
-from ...models import AdminUser, Tenant
+from ...models import AdminUser, Tenant, Bot, Conversation, Message
 from .auth import get_current_admin_user
 
-router = APIRouter(prefix="/admin/tenants", tags=["admin-tenants"])
+router = APIRouter(prefix="/admin/tenants", tags=["Admin - Tenants"])
 
 
 # Pydantic models
@@ -30,12 +30,17 @@ class TenantResponse(BaseModel):
     id: str
     name: str
     slug: str
-    description: Optional[str]
-    owner_email: str
+    description: Optional[str] = None
+    owner_email: Optional[str] = None
     plan: str
     is_active: bool
-    last_activity: Optional[str]
+    settings: Optional[dict] = None
+    global_rate_limit: Optional[int] = None
+    feature_flags: Optional[dict] = None
+    last_activity: Optional[str] = None
     created_at: datetime
+    updated_at: datetime
+    usage_stats: Optional[TenantUsageStats] = None
 
     class Config:
         from_attributes = True
@@ -44,9 +49,13 @@ class TenantResponse(BaseModel):
 class CreateTenantRequest(BaseModel):
     name: str
     slug: str
-    description: Optional[str]
-    owner_email: str
+    description: Optional[str] = None
+    owner_email: Optional[str] = None
     plan: str = "free"
+    is_active: bool = True
+    global_rate_limit: Optional[int] = 1000
+    settings: Optional[dict] = None
+    feature_flags: Optional[dict] = None
 
 
 class UpdateTenantRequest(BaseModel):
@@ -56,6 +65,9 @@ class UpdateTenantRequest(BaseModel):
     owner_email: Optional[str] = None
     plan: Optional[str] = None
     is_active: Optional[bool] = None
+    global_rate_limit: Optional[int] = None
+    settings: Optional[dict] = None
+    feature_flags: Optional[dict] = None
 
 
 class PaginatedTenantsResponse(BaseModel):
@@ -66,32 +78,80 @@ class PaginatedTenantsResponse(BaseModel):
     pages: int
 
 
+def create_tenant_response(tenant, usage_stats: TenantUsageStats) -> TenantResponse:
+    """Create a TenantResponse from a tenant model."""
+    return TenantResponse(
+        id=tenant.id,
+        name=tenant.name,
+        slug=tenant.slug,
+        description=tenant.description,
+        owner_email=tenant.owner_email,
+        plan=tenant.plan,
+        is_active=tenant.is_active,
+        settings=tenant.settings,
+        global_rate_limit=tenant.global_rate_limit,
+        feature_flags=tenant.feature_flags,
+        last_activity=None,
+        created_at=tenant.created_at,
+        updated_at=tenant.updated_at,
+        usage_stats=usage_stats
+    )
+
+
 def get_tenant_usage_stats(db: Session, tenant_id: str) -> TenantUsageStats:
     """Get usage statistics for a tenant."""
-    # Count conversations (chats)
-    total_chats = db.query(func.count(Conversation.id)).join(Bot).filter(
-        Bot.tenant_id == tenant_id
-    ).scalar() or 0
-    
-    # Count messages
-    total_messages = db.query(func.count(Message.id)).join(Conversation).join(Bot).filter(
-        Bot.tenant_id == tenant_id
-    ).scalar() or 0
-    
-    # Get latest activity
-    latest_message = db.query(func.max(Message.created_at)).join(Conversation).join(Bot).filter(
-        Bot.tenant_id == tenant_id
-    ).scalar()
-    
-    # Mock other stats (implement actual calculations as needed)
-    return TenantUsageStats(
-        total_chats=total_chats,
-        total_messages=total_messages,
-        total_tokens_used=0,  # Implement token counting
-        active_users=0,  # Implement user counting
-        storage_used_mb=0.0,  # Implement storage calculation
-        last_activity=latest_message.isoformat() if latest_message else None
-    )
+    try:
+        # Count conversations (chats)
+        total_chats = db.query(func.count(Conversation.id)).join(Bot).filter(
+            Bot.tenant_id == tenant_id
+        ).scalar() or 0
+        
+        # Count messages
+        total_messages = db.query(func.count(Message.id)).join(Conversation).join(Bot).filter(
+            Bot.tenant_id == tenant_id
+        ).scalar() or 0
+        
+        # Get latest activity
+        latest_message = db.query(func.max(Message.created_at)).join(Conversation).join(Bot).filter(
+            Bot.tenant_id == tenant_id
+        ).scalar()
+        
+        # Calculate total tokens used (sum from message token_usage)
+        token_result = db.query(func.sum(
+            func.cast(Message.token_usage['total_tokens'].astext, Integer)
+        )).join(Conversation).join(Bot).filter(
+            Bot.tenant_id == tenant_id,
+            Message.token_usage.has_key('total_tokens')
+        ).scalar()
+        total_tokens_used = token_result or 0
+        
+        # Count active users (unique session_ids in last 30 days)
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        active_users = db.query(func.count(func.distinct(Conversation.session_id))).join(Bot).filter(
+            Bot.tenant_id == tenant_id,
+            Conversation.created_at >= cutoff_date,
+            Conversation.session_id.isnot(None)
+        ).scalar() or 0
+        
+        return TenantUsageStats(
+            total_chats=total_chats,
+            total_messages=total_messages,
+            total_tokens_used=total_tokens_used,
+            active_users=active_users,
+            storage_used_mb=0.0,  # TODO: Implement storage calculation from documents
+            last_activity=latest_message.isoformat() if latest_message else None
+        )
+    except Exception as e:
+        # Return default stats if there's an error
+        return TenantUsageStats(
+            total_chats=0,
+            total_messages=0,
+            total_tokens_used=0,
+            active_users=0,
+            storage_used_mb=0.0,
+            last_activity=None
+        )
 
 
 @router.get("/", response_model=PaginatedTenantsResponse)
@@ -135,18 +195,7 @@ async def get_tenants(
     tenant_responses = []
     for tenant in tenants:
         usage_stats = get_tenant_usage_stats(db, tenant.id)
-        tenant_response = TenantResponse(
-            id=tenant.id,
-            name=tenant.name,
-            slug=tenant.slug,
-            description=tenant.description,
-            owner_email=tenant.owner_email,
-            plan=tenant.plan,
-            is_active=tenant.is_active,
-            created_at=tenant.created_at.isoformat(),
-            updated_at=tenant.updated_at.isoformat(),
-            usage_stats=usage_stats
-        )
+        tenant_response = create_tenant_response(tenant, usage_stats)
         tenant_responses.append(tenant_response)
     
     return PaginatedTenantsResponse(
@@ -208,7 +257,10 @@ async def create_tenant(
         description=tenant_data.description,
         owner_email=tenant_data.owner_email,
         plan=tenant_data.plan,
-        is_active=tenant_data.is_active
+        is_active=tenant_data.is_active,
+        settings=tenant_data.settings or {},
+        global_rate_limit=tenant_data.global_rate_limit or 1000,
+        feature_flags=tenant_data.feature_flags or {}
     )
     
     db.add(tenant)
