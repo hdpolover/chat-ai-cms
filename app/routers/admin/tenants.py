@@ -101,7 +101,7 @@ async def get_tenants(
     search: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     plan: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get all tenants with pagination and filtering."""
@@ -161,7 +161,7 @@ async def get_tenants(
 @router.get("/{tenant_id}", response_model=TenantResponse)
 async def get_tenant(
     tenant_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get a specific tenant by ID."""
@@ -187,8 +187,8 @@ async def get_tenant(
 
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
-    tenant_data: TenantCreateRequest,
-    db: Session = Depends(get_db),
+    tenant_data: CreateTenantRequest,
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Create a new tenant."""
@@ -234,8 +234,8 @@ async def create_tenant(
 @router.put("/{tenant_id}", response_model=TenantResponse)
 async def update_tenant(
     tenant_id: str,
-    tenant_data: TenantUpdateRequest,
-    db: Session = Depends(get_db),
+    tenant_data: UpdateTenantRequest,
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Update a tenant."""
@@ -279,7 +279,7 @@ async def update_tenant(
 @router.delete("/{tenant_id}")
 async def delete_tenant(
     tenant_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Delete a tenant."""
@@ -296,7 +296,7 @@ async def delete_tenant(
 @router.get("/{tenant_id}/stats", response_model=TenantUsageStats)
 async def get_tenant_stats(
     tenant_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get detailed usage statistics for a tenant."""

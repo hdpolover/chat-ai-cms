@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, text
 from sqlalchemy.orm import Session
@@ -11,16 +11,7 @@ from sqlalchemy.orm import Session
 from ...db import get_sync_db
 from ...models import AdminUser, Tenant, Bot, Conversation, Message, SystemSettings, GlobalAIProvider
 from .auth import get_current_admin_user
-from typing import List, Dict, Any
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
-from ...db import get_db
-from ...models import Tenant, Bot, Conversation, Message, SystemSettings, GlobalAIProvider, AdminUser as AdminUserModel
-from .auth import get_current_admin_user, AdminUser
+from typing import Dict, Any
 
 router = APIRouter(prefix="/admin", tags=["admin-dashboard"])
 
@@ -41,6 +32,14 @@ class SystemSettingsResponse(BaseModel):
     rate_limits: Dict[str, int]
     maintenance_mode: bool
     registration_enabled: bool
+
+
+class SystemSettingsUpdateRequest(BaseModel):
+    ai_provider_default: Optional[str] = None
+    max_tenants_per_plan: Optional[Dict[str, int]] = None
+    rate_limits: Optional[Dict[str, int]] = None
+    maintenance_mode: Optional[bool] = None
+    registration_enabled: Optional[bool] = None
 
 
 class SystemMetrics(BaseModel):
@@ -84,7 +83,7 @@ class AIProviderUpdateRequest(BaseModel):
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get dashboard statistics."""
@@ -123,7 +122,7 @@ async def get_dashboard_stats(
 @router.get("/dashboard/metrics")
 async def get_dashboard_metrics(
     period: str = "day",
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get dashboard metrics for charts."""
@@ -183,7 +182,7 @@ def set_system_setting(db: Session, key: str, value: Any, description: str = Non
 
 @router.get("/settings/system", response_model=SystemSettingsResponse)
 async def get_system_settings(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get system settings."""
@@ -206,7 +205,7 @@ async def get_system_settings(
 @router.put("/settings/system", response_model=SystemSettingsResponse)
 async def update_system_settings(
     settings_data: SystemSettingsUpdateRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Update system settings."""
@@ -221,7 +220,7 @@ async def update_system_settings(
 
 @router.get("/settings/ai-providers", response_model=List[AIProviderResponse])
 async def get_ai_providers(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Get all global AI providers."""
@@ -242,7 +241,7 @@ async def get_ai_providers(
 @router.post("/settings/ai-providers", response_model=AIProviderResponse, status_code=status.HTTP_201_CREATED)
 async def create_ai_provider(
     provider_data: AIProviderCreateRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Create a new global AI provider."""
@@ -279,7 +278,7 @@ async def create_ai_provider(
 async def update_ai_provider(
     provider_id: str,
     provider_data: AIProviderUpdateRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Update a global AI provider."""
@@ -315,7 +314,7 @@ async def update_ai_provider(
 @router.delete("/settings/ai-providers/{provider_id}")
 async def delete_ai_provider(
     provider_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db),
     current_admin: AdminUser = Depends(get_current_admin_user)
 ):
     """Delete a global AI provider."""
