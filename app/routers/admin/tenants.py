@@ -10,7 +10,7 @@ from sqlalchemy import select, func, desc, asc, Integer
 from sqlalchemy.orm import Session
 
 from ...db import get_sync_db
-from ...models import AdminUser, Tenant, Bot, Conversation, Message
+from ...models import AdminUser, Tenant, Bot, Conversation, Message, TenantAIProvider
 from .auth import get_current_admin_user
 
 router = APIRouter(prefix="/admin/tenants", tags=["Admin - Tenants"])
@@ -76,6 +76,38 @@ class PaginatedTenantsResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+class TenantBotInfo(BaseModel):
+    id: str
+    name: str
+    model: str
+    is_active: bool
+    ai_provider_name: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TenantAIProviderInfo(BaseModel):
+    id: str
+    provider_name: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TenantDetailsResponse(BaseModel):
+    tenant: TenantResponse
+    bots: List[TenantBotInfo]
+    ai_providers: List[TenantAIProviderInfo]
+    stats: TenantUsageStats
+
+    class Config:
+        from_attributes = True
 
 
 def create_tenant_response(tenant, usage_stats: TenantUsageStats) -> TenantResponse:
@@ -343,6 +375,72 @@ async def delete_tenant(
     db.commit()
     
     return {"message": "Tenant deleted successfully"}
+
+
+@router.get("/{tenant_id}/full", response_model=TenantDetailsResponse)
+async def get_tenant_details(
+    tenant_id: str,
+    db: Session = Depends(get_sync_db),
+    current_admin: AdminUser = Depends(get_current_admin_user)
+):
+    """Get detailed tenant information including bots and AI providers."""
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Get usage stats
+    usage_stats = get_tenant_usage_stats(db, tenant.id)
+    
+    # Get tenant bots with AI provider info
+    bots_query = db.query(
+        Bot.id,
+        Bot.name,
+        Bot.model,
+        Bot.is_active,
+        Bot.created_at,
+        TenantAIProvider.provider_name
+    ).join(
+        TenantAIProvider, Bot.tenant_ai_provider_id == TenantAIProvider.id
+    ).filter(
+        Bot.tenant_id == tenant_id
+    ).all()
+    
+    bots = [
+        TenantBotInfo(
+            id=bot.id,
+            name=bot.name,
+            model=bot.model,
+            is_active=bot.is_active,
+            ai_provider_name=bot.provider_name,
+            created_at=bot.created_at
+        )
+        for bot in bots_query
+    ]
+    
+    # Get tenant AI providers
+    ai_providers_query = db.query(TenantAIProvider).filter(
+        TenantAIProvider.tenant_id == tenant_id
+    ).all()
+    
+    ai_providers = [
+        TenantAIProviderInfo(
+            id=provider.id,
+            provider_name=provider.provider_name,
+            is_active=provider.is_active,
+            created_at=provider.created_at
+        )
+        for provider in ai_providers_query
+    ]
+    
+    # Create tenant response
+    tenant_response = create_tenant_response(tenant, usage_stats)
+    
+    return TenantDetailsResponse(
+        tenant=tenant_response,
+        bots=bots,
+        ai_providers=ai_providers,
+        stats=usage_stats
+    )
 
 
 @router.get("/{tenant_id}/stats", response_model=TenantUsageStats)

@@ -233,15 +233,14 @@ export default function TenantList() {
         <CardContent sx={{ p: 0 }}>
           <TableContainer component={Paper} elevation={0}>
             <Table>
-              <TableHead>
+              <TableHead sx={{ bgcolor: 'grey.50' }}>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Owner</TableCell>
-                  <TableCell>Plan</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Created</TableCell>
-                  <TableCell>Usage</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell sx={{ fontWeight: 600, py: 1.5 }}>Tenant</TableCell>
+                  <TableCell sx={{ fontWeight: 600, py: 1.5 }}>Plan & Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600, py: 1.5 }}>Resources</TableCell>
+                  <TableCell sx={{ fontWeight: 600, py: 1.5 }}>Activity</TableCell>
+                  <TableCell sx={{ fontWeight: 600, py: 1.5 }}>Owner</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, py: 1.5 }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -251,27 +250,30 @@ export default function TenantList() {
                       <TableRow key={index}>
                         <TableCell>
                           <Box>
-                            <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
-                            <Box sx={{ height: 16, bgcolor: 'grey.100', borderRadius: 1, width: '60%' }} />
+                            <Box sx={{ height: 18, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
+                            <Box sx={{ height: 14, bgcolor: 'grey.100', borderRadius: 1, width: '60%' }} />
                           </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, width: '80%' }} />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ height: 24, bgcolor: 'grey.200', borderRadius: 12, width: 60 }} />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ height: 24, bgcolor: 'grey.200', borderRadius: 12, width: 60 }} />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, width: '70%' }} />
                         </TableCell>
                         <TableCell>
                           <Box>
-                            <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
-                            <Box sx={{ height: 16, bgcolor: 'grey.100', borderRadius: 1, width: '60%' }} />
+                            <Box sx={{ height: 20, bgcolor: 'grey.200', borderRadius: 12, width: 50, mb: 0.5 }} />
+                            <Box sx={{ height: 18, bgcolor: 'grey.100', borderRadius: 12, width: 60 }} />
                           </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Box sx={{ height: 16, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
+                            <Box sx={{ height: 14, bgcolor: 'grey.100', borderRadius: 1, width: '70%' }} />
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Box sx={{ height: 16, bgcolor: 'grey.200', borderRadius: 1, mb: 0.5 }} />
+                            <Box sx={{ height: 14, bgcolor: 'grey.100', borderRadius: 1, width: '80%' }} />
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ height: 16, bgcolor: 'grey.200', borderRadius: 1, width: '70%' }} />
                         </TableCell>
                         <TableCell>
                           <Box sx={{ height: 32, bgcolor: 'grey.200', borderRadius: 1, width: 32 }} />
@@ -281,7 +283,7 @@ export default function TenantList() {
                   </>
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       <Alert severity="error" sx={{ m: 2 }}>
                         Failed to load tenants. Please try again.
                       </Alert>
@@ -289,60 +291,78 @@ export default function TenantList() {
                   </TableRow>
                 ) : tenants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       No tenants found
                     </TableCell>
                   </TableRow>
                 ) : (
                   tenants.map((tenant) => (
-                    <TableRow key={tenant.id} hover>
+                    <TableRow key={tenant.id} hover sx={{ '& td': { py: 1.5 } }}>
                       <TableCell>
                         <Box>
-                          <Typography variant="body2" fontWeight={500}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
                             {tenant.name}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', bgcolor: 'grey.100', px: 0.5, py: 0.25, borderRadius: 0.5 }}>
                             {tenant.slug}
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell>{tenant.owner_email}</TableCell>
+                      
                       <TableCell>
-                        <Chip
-                          label={tenant.plan}
-                          color={getPlanColor(tenant.plan) as any}
-                          size="small"
-                          sx={{ textTransform: 'capitalize' }}
-                        />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Chip
+                            label={tenant.plan?.toUpperCase()}
+                            color={getPlanColor(tenant.plan) as any}
+                            size="small"
+                            sx={{ height: 20, fontSize: '0.7rem', width: 'fit-content' }}
+                          />
+                          <Chip
+                            label={tenant.is_active ? 'Active' : 'Inactive'}
+                            color={tenant.is_active ? 'success' : 'error'}
+                            size="small"
+                            variant="outlined"
+                            sx={{ height: 18, fontSize: '0.65rem', width: 'fit-content' }}
+                          />
+                        </Box>
                       </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={tenant.is_active ? 'Active' : 'Inactive'}
-                          color={tenant.is_active ? 'success' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {formatDistanceToNow(new Date(tenant.created_at), { addSuffix: true })}
-                        </Typography>
-                      </TableCell>
+                      
                       <TableCell>
                         <Box>
-                          <Typography variant="body2">
-                            {tenant.usage_stats?.total_chats || 0} chats
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
+                            <Box component="span" sx={{ width: 6, height: 6, bgcolor: 'primary.main', borderRadius: '50%' }} />
+                            {/* This would need to be added to the API response */}
+                            0 bots • 0 providers
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {tenant.usage_stats?.active_users || 0} users
+                            Rate: {(tenant.global_rate_limit || 1000).toLocaleString()}/hr
                           </Typography>
                         </Box>
                       </TableCell>
+                      
+                      <TableCell>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontSize: '0.8rem', mb: 0.25 }}>
+                            {tenant.usage_stats?.total_chats || 0} chats • {tenant.usage_stats?.total_messages || 0} msgs
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {tenant.usage_stats?.active_users || 0} users • Created {formatDistanceToNow(new Date(tenant.created_at), { addSuffix: true })}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                          {tenant.owner_email || 'No owner'}
+                        </Typography>
+                      </TableCell>
+                      
                       <TableCell align="right">
                         <IconButton
                           onClick={(e) => handleMenuOpen(e, tenant)}
                           size="small"
                         >
-                          <MoreVert />
+                          <MoreVert fontSize="small" />
                         </IconButton>
                       </TableCell>
                     </TableRow>

@@ -18,11 +18,29 @@ import {
   Typography,
   Divider,
   Alert,
+  Card,
+  CardContent,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  CircularProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
+import {
+  SmartToy as BotIcon,
+  CloudQueue as ProviderIcon,
+  ExpandMore,
+  CheckCircle,
+  Cancel,
+} from '@mui/icons-material';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { tenantService } from '@/services/tenant';
 import type { Tenant, TenantFormData } from '@/types';
 
@@ -58,6 +76,13 @@ export default function TenantDialog({
 }: TenantDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  // Fetch detailed tenant information for view mode
+  const { data: tenantDetails, isLoading: detailsLoading } = useQuery({
+    queryKey: ['tenant-details', tenant?.id],
+    queryFn: () => tenantService.getTenantDetails(tenant!.id),
+    enabled: mode === 'view' && !!tenant?.id && open,
+  });
 
   const {
     register,
@@ -170,6 +195,283 @@ export default function TenantDialog({
   };
 
   const isReadOnly = mode === 'view';
+
+  // Show detailed view for view mode
+  if (mode === 'view') {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h5" component="h2">
+              {tenant?.name || 'Tenant Details'}
+            </Typography>
+            <Chip
+              label={tenant?.is_active ? 'Active' : 'Inactive'}
+              color={tenant?.is_active ? 'success' : 'error'}
+              size="small"
+            />
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent>
+          {detailsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                {/* Basic Information */}
+                <Grid item xs={12}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                        Basic Information
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Tenant Name
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {tenant?.name || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Slug
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {tenant?.slug || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Description
+                            </Typography>
+                            <Typography variant="body1">
+                              {tenant?.description || 'No description provided'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Owner Email
+                            </Typography>
+                            <Typography variant="body1">
+                              {tenant?.owner_email || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Subscription Plan
+                            </Typography>
+                            <Chip
+                              label={tenant?.plan?.toUpperCase() || 'FREE'}
+                              color={tenant?.plan === 'enterprise' ? 'primary' : tenant?.plan === 'pro' ? 'secondary' : 'default'}
+                              variant="outlined"
+                            />
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Rate Limit (per hour)
+                            </Typography>
+                            <Typography variant="body1">
+                              {tenant?.global_rate_limit?.toLocaleString() || '1,000'} requests
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Created At
+                            </Typography>
+                            <Typography variant="body1">
+                              {tenant?.created_at ? new Date(tenant.created_at).toLocaleDateString() : 'N/A'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Usage Statistics */}
+                <Grid item xs={12}>
+                  <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                    <CardContent sx={{ p: 2.5 }}>
+                      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 600 }}>
+                        Usage Statistics
+                      </Typography>
+                      <Grid container spacing={1.5}>
+                        <Grid item xs={6} md={3}>
+                          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'primary.main', borderRadius: 1, color: 'white' }}>
+                            <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                              {tenantDetails?.stats?.total_chats || 0}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                              Total Chats
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'secondary.main', borderRadius: 1, color: 'white' }}>
+                            <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                              {tenantDetails?.stats?.total_messages || 0}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                              Messages
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'success.main', borderRadius: 1, color: 'white' }}>
+                            <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                              {tenantDetails?.stats?.active_users || 0}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                              Active Users
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'warning.main', borderRadius: 1, color: 'white' }}>
+                            <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                              {tenantDetails?.stats?.storage_used_mb || 0}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                              MB Used
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Bots */}
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                    <CardContent sx={{ p: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, fontSize: '1rem' }}>
+                        <BotIcon fontSize="small" />
+                        Bots ({tenantDetails?.bots?.length || 0})
+                      </Typography>
+                      {tenantDetails?.bots?.length ? (
+                        <Box sx={{ '& > *:not(:last-child)': { mb: 1 } }}>
+                          {tenantDetails.bots.map((bot) => (
+                            <Box key={bot.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                              {bot.is_active ? <CheckCircle color="success" sx={{ fontSize: 16 }} /> : <Cancel color="error" sx={{ fontSize: 16 }} />}
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.2 }}>
+                                  {bot.name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                                  {bot.model} • {bot.ai_provider_name}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2, fontStyle: 'italic' }}>
+                          No bots configured
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* AI Providers */}
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                    <CardContent sx={{ p: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, fontSize: '1rem' }}>
+                        <ProviderIcon fontSize="small" />
+                        AI Providers ({tenantDetails?.ai_providers?.length || 0})
+                      </Typography>
+                      {tenantDetails?.ai_providers?.length ? (
+                        <Box sx={{ '& > *:not(:last-child)': { mb: 1 } }}>
+                          {tenantDetails.ai_providers.map((provider) => (
+                            <Box key={provider.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                              {provider.is_active ? <CheckCircle color="success" sx={{ fontSize: 16 }} /> : <Cancel color="error" sx={{ fontSize: 16 }} />}
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.2 }}>
+                                  {provider.provider_name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                                  Added: {new Date(provider.created_at).toLocaleDateString()}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2, fontStyle: 'italic' }}>
+                          No AI providers configured
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Configuration */}
+                <Grid item xs={12}>
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        Advanced Configuration
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
+                            Settings
+                          </Typography>
+                          <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1, fontFamily: 'monospace' }}>
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                              {JSON.stringify(tenant?.settings || {}, null, 2)}
+                            </pre>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
+                            Feature Flags
+                          </Typography>
+                          <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1, fontFamily: 'monospace' }}>
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                              {JSON.stringify(tenant?.feature_flags || {}, null, 2)}
+                            </pre>
+                          </Box>
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        
+        <DialogActions>
+          <Button onClick={onClose} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -323,78 +625,23 @@ export default function TenantDialog({
               </>
             )}
 
-            {mode === 'view' && tenant && (
-              <>
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="h6" gutterBottom>
-                    Usage Statistics
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
-                      {tenant.usage_stats?.total_chats || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Total Chats
-                    </Typography>
-                  </Box>
-                </Grid>
-                
-                <Grid item xs={12} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
-                      {tenant.usage_stats?.total_messages || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Total Messages
-                    </Typography>
-                  </Box>
-                </Grid>
-                
-                <Grid item xs={12} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
-                      {tenant.usage_stats?.active_users || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Active Users
-                    </Typography>
-                  </Box>
-                </Grid>
-                
-                <Grid item xs={12} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
-                      {tenant.usage_stats?.storage_used_mb || 0} MB
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Storage Used
-                    </Typography>
-                  </Box>
-                </Grid>
-              </>
-            )}
+
           </Grid>
         </Box>
       </DialogContent>
       
       <DialogActions>
         <Button onClick={onClose}>
-          {mode === 'view' ? 'Close' : 'Cancel'}
+          Cancel
         </Button>
         
-        {!isReadOnly && (
-          <Button
-            onClick={handleSubmit(onSubmit)}
-            variant="contained"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Saving...' : mode === 'create' ? 'Create' : 'Save'}
-          </Button>
-        )}
+        <Button
+          onClick={handleSubmit(onSubmit)}
+          variant="contained"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Saving...' : mode === 'create' ? 'Create' : 'Save'}
+        </Button>
       </DialogActions>
     </Dialog>
   );

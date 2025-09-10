@@ -57,6 +57,30 @@ export class TenantService {
     return response.data;
   }
 
+  async getTenantDetails(id: string): Promise<{
+    tenant: Tenant;
+    bots: Array<{
+      id: string;
+      name: string;
+      model: string;
+      is_active: boolean;
+      ai_provider_name: string;
+      created_at: string;
+    }>;
+    ai_providers: Array<{
+      id: string;
+      provider_name: string;
+      is_active: boolean;
+      created_at: string;
+    }>;
+    stats: TenantUsageStats;
+  }> {
+    const response = await apiClient.get(
+      `${API_CONFIG.ENDPOINTS.TENANTS.DETAILS(id)}/full`
+    );
+    return response.data;
+  }
+
   async toggleTenantStatus(id: string, is_active: boolean): Promise<Tenant> {
     const response = await apiClient.patch<Tenant>(
       API_CONFIG.ENDPOINTS.TENANTS.UPDATE(id),

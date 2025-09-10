@@ -1,12 +1,15 @@
 'use client';
 
-import Layout from '@/components/layout/Layout';
-import SystemSettings from '@/components/settings/SystemSettings';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function SettingsPage() {
-  return (
-    <Layout>
-      <SystemSettings />
-    </Layout>
-  );
+export default function Settings() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to system settings by default
+    router.replace('/settings/system');
+  }, [router]);
+
+  return null;
 }

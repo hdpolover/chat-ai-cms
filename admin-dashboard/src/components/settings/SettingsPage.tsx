@@ -1,71 +1,101 @@
 'use client';
-import { useState } from 'react';
+
+import React from 'react';
 import {
   Box,
-  Tabs,
-  Tab,
+  Container,
   Typography,
   Paper,
 } from '@mui/material';
+import { usePathname } from 'next/navigation';
 import SystemSettings from './SystemSettings';
 import AIProviderSettings from './AIProviderSettings';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
+const SettingsPage: React.FC = () => {
+  const pathname = usePathname();
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+  const getPageTitle = () => {
+    switch (pathname) {
+      case '/settings/system':
+        return 'System Settings';
+      case '/settings/ai-providers':
+        return 'AI Providers';
+      case '/settings/users':
+        return 'User Management';
+      case '/settings/security':
+        return 'API & Security';
+      default:
+        return 'Settings';
+    }
+  };
 
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`settings-tabpanel-${index}`}
-      aria-labelledby={`settings-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
-
-export default function SettingsPage() {
-  const [tabValue, setTabValue] = useState(0);
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const renderSettingContent = () => {
+    switch (pathname) {
+      case '/settings/system':
+        return <SystemSettings />;
+      case '/settings/ai-providers':
+        return <AIProviderSettings />;
+      case '/settings/users':
+        return (
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" component="h1" sx={{ mb: 0.5, fontWeight: 600 }}>
+                User Management
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Manage user accounts, roles, permissions, and access control
+              </Typography>
+            </Box>
+            <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Typography variant="h6" color="text.secondary" gutterBottom>
+                Coming Soon
+              </Typography>
+              <Typography color="text.secondary">
+                User management features will be implemented here. This will include user roles, permissions, and access control settings.
+              </Typography>
+            </Paper>
+          </Box>
+        );
+      case '/settings/security':
+        return (
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" component="h1" sx={{ mb: 0.5, fontWeight: 600 }}>
+                API & Security Settings
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Configure API access, rate limiting, and security policies
+              </Typography>
+            </Box>
+            <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Typography variant="h6" color="text.secondary" gutterBottom>
+                Coming Soon
+              </Typography>
+              <Typography color="text.secondary">
+                API configuration and security settings will be implemented here. This will include API keys, rate limiting, and security policies.
+              </Typography>
+            </Paper>
+          </Box>
+        );
+      default:
+        return (
+          <Box sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Welcome to Settings
+            </Typography>
+            <Typography color="text.secondary">
+              Please select a settings category from the navigation menu.
+            </Typography>
+          </Box>
+        );
+    }
   };
 
   return (
-    <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Settings
-      </Typography>
-
-      <Paper elevation={0} sx={{ borderRadius: 2 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="System Settings" />
-            <Tab label="AI Providers" />
-            <Tab label="User Management" />
-          </Tabs>
-        </Box>
-
-        <TabPanel value={tabValue} index={0}>
-          <SystemSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={1}>
-          <AIProviderSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={2}>
-          <Typography>User Management - Coming Soon</Typography>
-        </TabPanel>
-      </Paper>
+    <Box sx={{ width: '100%' }}>
+      {renderSettingContent()}
     </Box>
   );
-}
+};
+
+export default SettingsPage;

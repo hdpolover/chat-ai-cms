@@ -67,6 +67,13 @@ export interface AIProvider {
   is_default: boolean;
 }
 
+export interface SystemSettingItem {
+  id: string;
+  key: string;
+  value: any;
+  description?: string;
+}
+
 // API Response Types
 export interface ApiResponse<T = any> {
   data: T;

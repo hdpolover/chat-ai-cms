@@ -1,5 +1,5 @@
 'use client';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import {
   AppBar,
   Box,
@@ -17,6 +17,7 @@ import {
   Menu,
   MenuItem,
   Divider,
+  Collapse,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -25,11 +26,17 @@ import {
   Settings,
   Logout,
   AccountCircle,
+  ExpandLess,
+  ExpandMore,
+  SettingsApplications,
+  SmartToy,
+  People,
+  Security,
 } from '@mui/icons-material';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
-const drawerWidth = 240;
+const drawerWidth = 260;
 
 interface LayoutProps {
   children: ReactNode;
@@ -38,15 +45,29 @@ interface LayoutProps {
 const navigationItems = [
   { title: 'Dashboard', icon: Dashboard, path: '/dashboard' },
   { title: 'Tenants', icon: Business, path: '/tenants' },
-  { title: 'Settings', icon: Settings, path: '/settings' },
+];
+
+const settingsItems = [
+  { title: 'System Settings', icon: SettingsApplications, path: '/settings/system' },
+  { title: 'AI Providers', icon: SmartToy, path: '/settings/ai-providers' },
+  { title: 'User Management', icon: People, path: '/settings/users' },
+  { title: 'API & Security', icon: Security, path: '/settings/security' },
 ];
 
 export default function Layout({ children }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  // Auto-expand settings menu when on settings page
+  useEffect(() => {
+    if (pathname.startsWith('/settings')) {
+      setSettingsOpen(true);
+    }
+  }, [pathname]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -65,30 +86,138 @@ export default function Layout({ children }: LayoutProps) {
     await logout();
   };
 
+  const handleSettingsClick = () => {
+    setSettingsOpen(!settingsOpen);
+  };
+
+  const isSettingsPath = pathname.startsWith('/settings');
+
   const drawer = (
-    <div>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Toolbar sx={{ px: 3, py: 2 }}>
+        <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 600 }}>
           Admin Panel
         </Typography>
       </Toolbar>
       <Divider />
-      <List>
+      <List sx={{ px: 2, py: 1 }}>
         {navigationItems.map((item) => (
-          <ListItem key={item.title} disablePadding>
+          <ListItem key={item.title} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={pathname === item.path}
               onClick={() => router.push(item.path)}
+              sx={{
+                borderRadius: 2,
+                minHeight: 44,
+                '&.Mui-selected': {
+                  backgroundColor: 'primary.main',
+                  color: 'white',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                  },
+                  '& .MuiListItemIcon-root': {
+                    color: 'white',
+                  },
+                },
+                '&:hover': {
+                  backgroundColor: 'grey.100',
+                },
+              }}
             >
-              <ListItemIcon>
-                <item.icon />
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <item.icon fontSize="small" />
               </ListItemIcon>
-              <ListItemText primary={item.title} />
+              <ListItemText 
+                primary={item.title}
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                }}
+              />
             </ListItemButton>
           </ListItem>
         ))}
+        
+        {/* Settings Menu with Sub-items */}
+        <ListItem disablePadding sx={{ mb: 0.5 }}>
+          <ListItemButton
+            selected={isSettingsPath}
+            onClick={handleSettingsClick}
+            sx={{
+              borderRadius: 2,
+              minHeight: 44,
+              '&.Mui-selected': {
+                backgroundColor: 'primary.main',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                },
+                '& .MuiListItemIcon-root': {
+                  color: 'white',
+                },
+              },
+              '&:hover': {
+                backgroundColor: 'grey.100',
+              },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <Settings fontSize="small" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Settings"
+              primaryTypographyProps={{
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              }}
+            />
+            {settingsOpen ? <ExpandLess /> : <ExpandMore />}
+          </ListItemButton>
+        </ListItem>
+        
+        <Collapse in={settingsOpen} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding sx={{ pl: 2 }}>
+            {settingsItems.map((item) => (
+              <ListItem key={item.title} disablePadding sx={{ mb: 0.5 }}>
+                <ListItemButton
+                  selected={pathname === item.path}
+                  onClick={() => router.push(item.path)}
+                  sx={{
+                    borderRadius: 2,
+                    minHeight: 40,
+                    pl: 2,
+                    '&.Mui-selected': {
+                      backgroundColor: 'primary.light',
+                      color: 'primary.contrastText',
+                      '&:hover': {
+                        backgroundColor: 'primary.main',
+                      },
+                      '& .MuiListItemIcon-root': {
+                        color: 'primary.contrastText',
+                      },
+                    },
+                    '&:hover': {
+                      backgroundColor: 'grey.50',
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <item.icon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={item.title}
+                    primaryTypographyProps={{
+                      fontSize: '0.8125rem',
+                      fontWeight: 400,
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </Collapse>
       </List>
-    </div>
+    </Box>
   );
 
   return (
@@ -115,19 +244,24 @@ export default function Layout({ children }: LayoutProps) {
             Chat AI CMS Admin
           </Typography>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="body2">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 500 }}>
               {user?.name || user?.email}
             </Typography>
             <IconButton
-              size="large"
+              size="small"
               aria-label="account of current user"
               aria-controls="menu-appbar"
               aria-haspopup="true"
               onClick={handleProfileMenuOpen}
-              color="inherit"
+              sx={{ 
+                color: 'inherit',
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
             >
-              <Avatar sx={{ width: 32, height: 32 }}>
+              <Avatar sx={{ width: 32, height: 32, fontSize: '1rem' }}>
                 <AccountCircle />
               </Avatar>
             </IconButton>
@@ -198,12 +332,16 @@ export default function Layout({ children }: LayoutProps) {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          p: { xs: 2, sm: 3 },
           width: { sm: `calc(100% - ${drawerWidth}px)` },
+          minHeight: '100vh',
+          backgroundColor: 'background.default',
         }}
       >
         <Toolbar />
-        {children}
+        <Box sx={{ py: 1 }}>
+          {children}
+        </Box>
       </Box>
     </Box>
   );
