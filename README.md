@@ -10,9 +10,10 @@ A multi-tenant chatbot API service built with FastAPI, PostgreSQL (with pgvector
 - **Scope-based Access Control**: Fine-grained permissions and guardrails
 - **Streaming Chat**: Server-sent events (SSE) for real-time responses
 - **Rate Limiting**: Per-API-key rate limiting with Redis
-- **Admin Interface**: SQLAdmin-powered UI for management
+- **Admin Dashboard**: Modern React-based UI for system management
+- **Tenant Management**: Full CRUD operations for managing tenants
 - **Document Processing**: Support for PDF, DOCX, JSON, Markdown, and URLs
-- **Authentication**: JWT tokens and TOTP for admin access
+- **Authentication**: JWT tokens with automatic refresh
 - **Observability**: Structured logging and health checks
 
 ## Tech Stack
@@ -46,8 +47,11 @@ cp .env.example .env
 ### 2. Start with Docker
 
 ```bash
-# Start all services
+# Start all services (API + Database + Redis)
 docker-compose up -d
+
+# Or start with Admin Dashboard included
+docker-compose -f docker-compose.admin.yml up -d
 
 # View logs
 docker-compose logs -f api

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import structlog
-from rq import Worker, Connection
+from rq import Worker
 
 # Add the parent directory to the path so we can import from app
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,10 +19,9 @@ def main():
     logger.info("Starting document processing worker")
     
     # Create worker
-    with Connection(redis_client):
-        worker = Worker(['document_processing'], connection=redis_client)
-        logger.info("Document worker started, listening for jobs...")
-        worker.work()
+    worker = Worker(['document_processing'], connection=redis_client)
+    logger.info("Document worker started, listening for jobs...")
+    worker.work()
 
 
 if __name__ == '__main__':

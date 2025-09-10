@@ -24,6 +24,25 @@ from sqlalchemy.sql import func
 from .db import Base
 
 
+class AdminUser(Base):
+    """Admin User model for system administration."""
+    __tablename__ = "admin_users"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="admin")  # admin, super_admin
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("idx_admin_user_email", "email"),
+    )
+
+
 class Tenant(Base):
     """Tenant model for multi-tenancy."""
     __tablename__ = "tenants"
@@ -31,6 +50,9 @@ class Tenant(Base):
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    owner_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    plan: Mapped[str] = mapped_column(String(50), default="free")  # free, pro, enterprise
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -285,4 +307,38 @@ class AuditLog(Base):
         Index("idx_audit_log_tenant_id", "tenant_id"),
         Index("idx_audit_log_action", "action"),
         Index("idx_audit_log_created_at", "created_at"),
+    )
+
+
+class SystemSettings(Base):
+    """System settings model for global configuration."""
+    __tablename__ = "system_settings"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    value: Mapped[dict] = mapped_column(JSON, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("idx_system_settings_key", "key"),
+    )
+
+
+class GlobalAIProvider(Base):
+    """Global AI Provider model for system-wide AI configurations."""
+    __tablename__ = "global_ai_providers"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(50), nullable=False)  # openai, anthropic, azure, custom
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("idx_global_ai_provider_type", "provider_type"),
     )

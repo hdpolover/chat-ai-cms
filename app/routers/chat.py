@@ -1,6 +1,6 @@
 """Chat router for handling chat requests."""
 import uuid
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -359,7 +359,7 @@ async def _chat_stream(
 
 
 async def _get_or_create_conversation(
-    session_id: str | None,
+    session_id: Optional[str],
     bot: Bot,
     db: DatabaseDep,
 ) -> Conversation:

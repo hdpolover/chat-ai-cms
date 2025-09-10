@@ -153,6 +153,17 @@ async def internal_error_handler(request: Request, exc):
 app.include_router(health.router, tags=["Health"])
 app.include_router(chat.router, prefix="/v1", tags=["Chat"])
 
+# Include admin routers
+try:
+    from .routers.admin import auth as admin_auth, tenants as admin_tenants, dashboard as admin_dashboard, settings as admin_settings
+    app.include_router(admin_auth.router, tags=["Admin Auth"])
+    app.include_router(admin_tenants.router, tags=["Admin Tenants"])
+    app.include_router(admin_dashboard.router, tags=["Admin Dashboard"])
+    app.include_router(admin_settings.router, tags=["Admin Settings"])
+    logger.info("Full admin routes loaded successfully with Python 3.12")
+except ImportError as e:
+    logger.warning("Admin routes not available", error=str(e))
+
 
 @app.get("/")
 async def root():

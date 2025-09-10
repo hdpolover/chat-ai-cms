@@ -1,29 +1,140 @@
 <!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
-- [x] Verify that the copilot-instructions.md file in the .github directory is created.
 
-- [x] Clarify Project Requirements
-	<!-- Multi-tenant chatbot API service with FastAPI, PostgreSQL, pgvector, Redis, and complete RAG pipeline. -->
+# Chat AI CMS API - Copilot Instructions
 
-- [x] Scaffold the Project
-	<!-- Project structure created with app/, tests/, docker/, alembic/ directories and all core files. -->
+## Project Overview
 
-- [x] Customize the Project
-	<!-- Full implementation completed with SQLAlchemy models, FastAPI routers, services, Docker setup, and comprehensive documentation. -->
+This is a multi-tenant chatbot API service with FastAPI, PostgreSQL, pgvector, Redis, and complete RAG pipeline. The project includes a comprehensive admin dashboard built with Next.js and React for tenant and system management.
 
-- [x] Install Required Extensions
-	<!-- No specific extensions required for this Python project. -->
+## Project Structure
 
-- [x] Compile the Project
-	<!-- Python project with pip installation via pyproject.toml. Dependencies defined and ready for installation. -->
+### Backend (FastAPI)
+- **Main Application**: `app/` directory with FastAPI application
+- **Models**: SQLAlchemy models in `app/models.py` for multi-tenant architecture
+- **Routers**: API endpoints organized by feature (chat, health, admin)
+- **Services**: Business logic layer (ai_provider_service, chat_service, retrieval_service)
+- **Database**: PostgreSQL with pgvector extension for vector search
+- **Authentication**: JWT-based auth with tenant-specific access
 
-- [x] Create and Run Task
-	<!-- Docker-compose setup provided for easy development and deployment. -->
+### Frontend (Admin Dashboard)
+- **Location**: `admin-dashboard/` directory
+- **Framework**: Next.js 14 with React 18 and TypeScript
+- **UI Library**: Material-UI (MUI) v5 with emotion styling
+- **State Management**: TanStack Query (React Query) v5
+- **Authentication**: JWT tokens with automatic refresh
+- **Features**: Tenant management, dashboard analytics, system settings, AI provider configuration
 
-- [x] Launch the Project
-	<!-- Project ready to launch with docker-compose up or direct Python execution. -->
+### Development Environment
+- **Docker**: Multi-service setup with PostgreSQL, Redis, FastAPI backend
+- **Database Migrations**: Alembic for schema management
+- **Testing**: Pytest setup for backend testing
 
-- [x] Ensure Documentation is Complete
-	<!-- Complete README.md and project documentation provided. -->
+## Key Components Checklist
+
+- [x] **Multi-tenant Backend API**: Complete FastAPI implementation with tenant isolation
+- [x] **Admin Authentication System**: JWT-based auth for admin users
+- [x] **Tenant Management**: CRUD operations for tenant creation and management
+- [x] **Dashboard Analytics**: Real-time statistics and usage metrics
+- [x] **System Settings**: Global configuration management
+- [x] **AI Provider Integration**: Support for OpenAI, Anthropic, and other providers
+- [x] **Document Processing Pipeline**: RAG implementation with vector search
+- [x] **Admin Dashboard UI**: Complete React/Next.js frontend
+- [x] **Docker Development Environment**: Multi-service containerized setup
+- [x] **Database Schema**: PostgreSQL with proper relationships and constraints
+
+## Development Guidelines
+
+### Code Architecture
+- Follow clean architecture principles with clear separation of concerns
+- Use dependency injection pattern for services
+- Implement proper error handling and validation
+- Maintain type safety with TypeScript and Pydantic models
+
+### Database Management
+- Use Alembic for all database schema changes
+- Implement proper foreign key relationships
+- Use UUIDs for primary keys where appropriate
+- Follow PostgreSQL best practices for indexing
+
+### Frontend Development
+- Use Material-UI components for consistent design
+- Implement proper form validation with React Hook Form and Zod
+- Use TanStack Query for server state management
+- Follow React best practices with hooks and functional components
+
+### API Development
+- Use FastAPI dependency injection for database sessions
+- Implement proper HTTP status codes and error responses
+- Use Pydantic schemas for request/response validation
+- Follow RESTful API design principles
+
+## Quick Start Commands
+
+### Backend Development
+```bash
+# Install Python dependencies
+pip install -e .
+
+# Run database migrations
+alembic upgrade head
+
+# Start development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Admin Dashboard Development
+```bash
+# Navigate to admin dashboard
+cd admin-dashboard
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+### Docker Development
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+## Environment Variables
+
+### Backend (.env)
+- `DATABASE_URL`: PostgreSQL connection string
+- `REDIS_URL`: Redis connection string  
+- `JWT_SECRET_KEY`: Secret key for JWT token generation
+- `OPENAI_API_KEY`: OpenAI API key for AI services
+- `ANTHROPIC_API_KEY`: Anthropic API key for Claude models
+
+### Frontend (admin-dashboard/.env.local)
+- `NEXT_PUBLIC_API_URL`: Backend API URL (default: http://localhost:8000)
+
+## Deployment Notes
+
+- Use Docker Compose for production deployment
+- Ensure proper environment variable configuration
+- Set up proper nginx reverse proxy configuration
+- Configure PostgreSQL with appropriate connection limits
+- Set up Redis for session and cache management
+
+## Recent Updates
+
+- Added comprehensive admin dashboard with React/Next.js
+- Implemented multi-tenant admin authentication system
+- Created tenant management interface with CRUD operations
+- Built dashboard analytics with real-time statistics
+- Added system settings management for global configuration
+- Enhanced backend with admin-specific API endpoints
+- Configured Docker environment for full-stack development
 
 <!--
 ## Execution Guidelines
