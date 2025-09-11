@@ -3,9 +3,9 @@ export interface TenantUser {
   id: string;
   email: string;
   name: string;
-  tenant_id: string;
-  tenant_slug: string;
-  role: 'owner' | 'admin' | 'member';
+  slug: string;
+  description?: string;
+  plan: string;
   is_active: boolean;
   last_login_at?: string;
   created_at: string;
@@ -99,7 +99,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string;
   token_type: string;
-  user: TenantUser;
+  tenant: TenantUser;
 }
 
 export interface CreateBotRequest {

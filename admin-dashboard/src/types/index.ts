@@ -16,7 +16,13 @@ export interface Tenant {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  owner_email: string;
+  email?: string;  // New: tenant login email
+  password_hash?: string;  // New: for authentication
+  is_email_verified?: boolean;  // New: email verification status
+  last_login_at?: string;  // New: last login timestamp
+  login_attempts?: number;  // New: failed login count
+  locked_until?: string;  // New: account lock timestamp
+  owner_email?: string;  // Existing: owner contact email
   plan: 'free' | 'pro' | 'enterprise';
   settings?: Record<string, any>;
   global_rate_limit?: number;
@@ -105,7 +111,9 @@ export interface TenantFormData {
   name: string;
   slug: string;
   description?: string;
-  owner_email: string;
+  email?: string;  // New: tenant login email
+  password?: string;  // New: tenant password (for creation only)
+  owner_email?: string;  // Owner contact email (optional)
   plan: 'free' | 'pro' | 'enterprise';
   is_active: boolean;
   settings?: Record<string, any>;

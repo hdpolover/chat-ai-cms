@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...db import get_sync_db
-from ...models import Tenant, TenantUser
+from ...models import Tenant
 from jose import JWTError, jwt
 import os
 
@@ -24,7 +24,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT Settings
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours for tenant users
+ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours for tenants
 
 # Schemas
 class TenantLoginRequest(BaseModel):
@@ -34,15 +34,15 @@ class TenantLoginRequest(BaseModel):
 class TenantLoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user: dict
+    tenant: dict
 
-class TenantUserResponse(BaseModel):
+class TenantResponse(BaseModel):
     id: str
-    email: str
+    email: Optional[str] = None
     name: str
-    tenant_id: str
-    tenant_slug: str
-    role: str
+    slug: str
+    description: Optional[str] = None
+    plan: str
     is_active: bool
     last_login_at: Optional[datetime] = None
     created_at: datetime
@@ -63,11 +63,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_tenant_user(
+async def get_current_tenant(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_sync_db)
-) -> TenantUser:
-    """Get current authenticated tenant user."""
+) -> Tenant:
+    """Get current authenticated tenant."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -82,101 +82,105 @@ async def get_current_tenant_user(
     except JWTError:
         raise credentials_exception
     
-    # Get tenant user from database
-    user = db.query(TenantUser).filter(TenantUser.email == email).first()
-    if user is None or not user.is_active:
+    # Get tenant from database
+    tenant = db.query(Tenant).filter(Tenant.email == email).first()
+    if tenant is None or not tenant.is_active:
         raise credentials_exception
     
-    # Ensure tenant is also active
-    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
-    if tenant is None or not tenant.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant account is inactive"
-        )
-    
-    return user
+    return tenant
 
 # Routes
 @router.post("/login", response_model=TenantLoginResponse)
-async def login_tenant_user(
+async def login_tenant(
     login_data: TenantLoginRequest,
     db: Session = Depends(get_sync_db)
 ):
-    """Authenticate tenant user and return access token."""
+    """Authenticate tenant and return access token."""
     
-    # Find user by email
-    user = db.query(TenantUser).filter(TenantUser.email == login_data.email).first()
+    # Find tenant by email
+    tenant = db.query(Tenant).filter(Tenant.email == login_data.email).first()
     
-    if not user or not user.is_active:
+    if not tenant or not tenant.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
     
-    # Check if tenant is active
-    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
-    if not tenant or not tenant.is_active:
+    # Check if password hash exists
+    if not tenant.password_hash:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant account is inactive"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account not configured for login"
         )
     
     # Verify password
-    if not verify_password(login_data.password, user.password_hash):
+    if not verify_password(login_data.password, tenant.password_hash):
+        # Increment failed login attempts
+        tenant.login_attempts = (tenant.login_attempts or 0) + 1
+        if tenant.login_attempts >= 5:
+            tenant.locked_until = datetime.utcnow() + timedelta(hours=1)
+        db.commit()
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
     
-    # Update last login
-    user.last_login_at = datetime.utcnow()
+    # Check if account is locked
+    if tenant.locked_until and tenant.locked_until > datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Account is temporarily locked due to failed login attempts"
+        )
+    
+    # Reset login attempts on successful login
+    tenant.login_attempts = 0
+    tenant.locked_until = None
+    tenant.last_login_at = datetime.utcnow()
     db.commit()
     
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": user.email, 
-            "tenant_id": user.tenant_id,
-            "role": user.role
+            "sub": tenant.email, 
+            "tenant_id": tenant.id,
+            "role": "tenant"  # Default role for tenant users
         },
         expires_delta=access_token_expires
     )
     
     return TenantLoginResponse(
         access_token=access_token,
-        user={
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-            "tenant_id": user.tenant_id,
-            "tenant_slug": tenant.slug,
-            "role": user.role,
-            "is_active": user.is_active,
-            "last_login_at": user.last_login_at,
-            "created_at": user.created_at
+        tenant={
+            "id": tenant.id,
+            "email": tenant.email,
+            "name": tenant.name,
+            "slug": tenant.slug,
+            "description": tenant.description,
+            "plan": tenant.plan,
+            "is_active": tenant.is_active,
+            "last_login_at": tenant.last_login_at,
+            "created_at": tenant.created_at
         }
     )
 
-@router.get("/me", response_model=TenantUserResponse)
-async def get_current_user(
-    current_user: TenantUser = Depends(get_current_tenant_user),
-    db: Session = Depends(get_sync_db)
+@router.get("/me", response_model=TenantResponse)
+async def get_current_tenant_info(
+    current_tenant: Tenant = Depends(get_current_tenant),
 ):
-    """Get current authenticated tenant user info."""
-    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    """Get current authenticated tenant information."""
     
-    return TenantUserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        tenant_id=current_user.tenant_id,
-        tenant_slug=tenant.slug if tenant else "",
-        role=current_user.role,
-        is_active=current_user.is_active,
-        last_login_at=current_user.last_login_at,
-        created_at=current_user.created_at
+    return TenantResponse(
+        id=current_tenant.id,
+        email=current_tenant.email,
+        name=current_tenant.name,
+        slug=current_tenant.slug,
+        description=current_tenant.description,
+        plan=current_tenant.plan,
+        is_active=current_tenant.is_active,
+        last_login_at=current_tenant.last_login_at,
+        created_at=current_tenant.created_at
     )
 
 @router.post("/logout")
@@ -184,22 +188,20 @@ async def logout_tenant_user():
     """Logout tenant user (client should delete token)."""
     return {"message": "Successfully logged out"}
 
-@router.post("/refresh")
-async def refresh_token(
-    current_user: TenantUser = Depends(get_current_tenant_user)
+@router.post("/refresh", response_model=dict)
+async def refresh_tenant_token(
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    """Refresh access token for authenticated tenant user."""
+    """Refresh access token for authenticated tenant."""
+    # Create new access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": current_user.email,
-            "tenant_id": current_user.tenant_id,
-            "role": current_user.role
+            "sub": current_tenant.email, 
+            "tenant_id": current_tenant.id,
+            "role": "tenant"
         },
         expires_delta=access_token_expires
     )
     
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    return {"access_token": access_token, "token_type": "bearer"}

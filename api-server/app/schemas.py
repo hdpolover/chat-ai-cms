@@ -64,21 +64,47 @@ class TenantBase(BaseSchema):
 
 class TenantCreate(TenantBase):
     """Tenant creation schema."""
-    pass
+    email: str = Field(..., max_length=255, description="Tenant login email")
+    password: str = Field(..., min_length=8, description="Tenant password")
+    description: Optional[str] = Field(None, description="Tenant description")
+    plan: str = Field("free", description="Tenant plan: free, pro, enterprise")
 
 
 class TenantUpdate(BaseSchema):
     """Tenant update schema."""
     name: Optional[str] = Field(None, max_length=255)
+    email: Optional[str] = Field(None, max_length=255)
     settings: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
+    description: Optional[str] = None
+    plan: Optional[str] = None
 
 
 class TenantResponse(TenantBase):
     """Tenant response schema."""
     id: str
+    email: Optional[str] = None
+    is_email_verified: bool = False
+    last_login_at: Optional[datetime] = None
+    login_attempts: int = 0
+    description: Optional[str] = None
+    owner_email: Optional[str] = None
+    plan: str = "free"
     created_at: datetime
     updated_at: datetime
+
+
+class TenantLoginRequest(BaseSchema):
+    """Tenant login request schema."""
+    email: str = Field(..., description="Tenant email")
+    password: str = Field(..., description="Tenant password")
+
+
+class TenantLoginResponse(BaseSchema):
+    """Tenant login response schema."""
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field("bearer", description="Token type")
+    tenant: TenantResponse = Field(..., description="Tenant information")
 
 
 # Bot schemas

@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./api-server/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -34,7 +34,7 @@ services:
   # FastAPI application
   api:
     build:
-      context: .
+      context: ./api-server
       dockerfile: docker/Dockerfile
     ports:
       - "8000:8000"
@@ -44,11 +44,12 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
       - DB_ECHO=false
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://localhost:8080
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:8000
     volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
+      - ./api-server/app:/app/app
+      - ./api-server/alembic:/app/alembic
+      - ./api-server/alembic.ini:/app/alembic.ini
+      - ./api-server/uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,7 +64,7 @@ services:
   # Background worker for document processing
   worker:
     build:
-      context: .
+      context: ./api-server
       dockerfile: docker/Dockerfile
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/chatbot_db
@@ -71,8 +72,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
     volumes:
-      - ./app:/app/app
-      - ./uploads:/app/uploads
+      - ./api-server/app:/app/app
+      - ./api-server/uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,8 +88,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - ./api-server/docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./api-server/docker/nginx/ssl:/etc/nginx/ssl
     depends_on:
       - api
     profiles:

@@ -1,170 +1,162 @@
-# Chatbot API
+# Chat AI CMS - Multi-Tenant Chatbot Platform
 
-A multi-tenant chatbot API service built with FastAPI, PostgreSQL (with pgvector), and Redis. This service provides a complete RAG (Retrieval-Augmented Generation) pipeline with document ingestion, vector embeddings, and scope-based access control.
+A comprehensive multi-tenant chatbot API service with admin and tenant dashboards, built with FastAPI, PostgreSQL, Redis, and Next.js.
 
-## Features
+## 🏗️ Project Structure
 
-- **Multi-tenant Architecture**: Separate tenants with isolated data and configurations
-- **RAG Pipeline**: Document ingestion, chunking, embedding, and retrieval
-- **Vector Search**: Powered by pgvector for semantic similarity search  
-- **Scope-based Access Control**: Fine-grained permissions and guardrails
-- **Streaming Chat**: Server-sent events (SSE) for real-time responses
-- **Rate Limiting**: Per-API-key rate limiting with Redis
-- **Admin Dashboard**: Modern React-based UI for system management
-- **Tenant Management**: Full CRUD operations for managing tenants
-- **Document Processing**: Support for PDF, DOCX, JSON, Markdown, and URLs
-- **Authentication**: JWT tokens with automatic refresh
-- **Observability**: Structured logging and health checks
+```
+chat-ai-cms/
+├── README.md                    # This file - project overview
+├── docker-compose.yml           # Multi-service Docker setup
+├── .gitignore                   # Git ignore patterns
+│
+├── backend/                     # FastAPI Backend API
+│   ├── app/                     # Main application code
+│   ├── alembic/                 # Database migrations
+│   ├── docker/                  # Docker configurations
+│   ├── scripts/                 # Utility scripts
+│   ├── tests/                   # Backend tests
+│   ├── pyproject.toml           # Python dependencies
+│   └── requirements.txt         # Legacy requirements
+│
+├── admin-dashboard/             # Admin Management Interface
+│   ├── src/                     # Next.js source code
+│   ├── package.json             # Node dependencies
+│   └── README.md                # Admin dashboard docs
+│
+├── tenant-dashboard/            # Tenant Self-Service Interface
+│   ├── src/                     # Next.js source code
+│   ├── package.json             # Node dependencies
+│   └── README.md                # Tenant dashboard docs
+│
+└── docs/                        # Project Documentation
+    ├── API.md                   # API documentation
+    ├── DEPLOYMENT.md            # Deployment guides
+    └── DEVELOPMENT.md           # Development setup
+```
 
-## Tech Stack
-
-- **FastAPI** + Uvicorn for the API server
-- **SQLAlchemy 2.0** + Alembic for database ORM and migrations
-- **PostgreSQL** + pgvector for data storage and vector search
-- **Redis** for caching, rate limiting, and task queues
-- **RQ** for background job processing
-- **OpenAI API** for chat completions and embeddings
-- **Pydantic v2** for data validation
-- **Docker** + docker-compose for containerization
-
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
+- Docker & Docker Compose
+- Node.js 18+ (for dashboard development)
+- Python 3.12+ (for backend development)
 
-- Docker and Docker Compose
-- OpenAI API key
-- Python 3.11+ (for local development)
-
-### 1. Clone and Setup
-
+### 1. Start All Services
 ```bash
-git clone <your-repo-url>
-cd chat-ai-cms-api
-cp .env.example .env
-# Edit .env with your OpenAI API key and other settings
-```
-
-### 2. Start with Docker
-
-```bash
-# Start all services (API + Database + Redis)
+# Start backend services (API, Database, Redis)
 docker-compose up -d
 
-# Or start with Admin Dashboard included
-docker-compose -f docker-compose.admin.yml up -d
+# Start admin dashboard (in separate terminal)
+cd admin-dashboard && npm install && npm run dev
 
-# View logs
-docker-compose logs -f api
-
-# Check health
-curl http://localhost:8000/v1/health
+# Start tenant dashboard (in separate terminal)  
+cd tenant-dashboard && npm install && npm run dev
 ```
 
-### 3. Run Database Migrations
+### 2. Access Applications
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **Admin Dashboard**: http://localhost:3002 (or next available port)
+- **Tenant Dashboard**: http://localhost:3000 (or next available port)
+
+## 🔧 Development
+
+### Backend Development
+```bash
+cd backend
+pip install -e .
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend Development
+```bash
+# Admin Dashboard
+cd admin-dashboard
+npm run dev
+
+# Tenant Dashboard
+cd tenant-dashboard
+npm run dev
+```
+
+## 📦 Components
+
+### Backend API (`/backend`)
+- **FastAPI** - Modern Python web framework
+- **PostgreSQL** - Primary database with pgvector for embeddings
+- **Redis** - Caching and session management
+- **Alembic** - Database migrations
+- **Multi-tenant architecture** with complete isolation
+
+### Admin Dashboard (`/admin-dashboard`)
+- **Next.js 14** - React framework with App Router
+- **Material-UI** - Component library
+- **TanStack Query** - Server state management
+- **TypeScript** - Type safety
+- **Features**: Tenant management, analytics, system settings
+
+### Tenant Dashboard (`/tenant-dashboard`)
+- **Next.js 15** - Latest React framework
+- **Material-UI** - Consistent design system
+- **TanStack Query** - API state management  
+- **TypeScript** - Full type safety
+- **Features**: Bot management, chat interface, usage analytics
+
+## 🛠️ Technology Stack
+
+**Backend:**
+- Python 3.12 + FastAPI
+- PostgreSQL 15 + pgvector
+- Redis 7
+- SQLAlchemy + Alembic
+- JWT Authentication
+- Docker containerization
+
+**Frontend:**
+- Next.js 14/15 + TypeScript
+- Material-UI v5
+- TanStack Query v5
+- React Hook Form + Zod
+- Axios for API calls
+
+## 📚 Documentation
+
+Detailed documentation is available in the `/docs` directory:
+- [API Documentation](./docs/API.md)
+- [Development Setup](./docs/DEVELOPMENT.md)
+- [Deployment Guide](./docs/DEPLOYMENT.md)
+
+## 🔐 Authentication
+
+- **Admin Dashboard**: JWT-based admin authentication
+- **Tenant Dashboard**: JWT-based tenant-scoped authentication
+- **API**: Bearer token authentication with role-based access
+
+## 🚢 Deployment
+
+The project is designed for containerized deployment:
 
 ```bash
-# Migrations run automatically in Docker, but you can run manually:
-docker-compose exec api alembic upgrade head
+# Production deployment
+docker-compose -f docker-compose.prod.yml up -d
+
+# Or deploy individual services
+docker-compose up -d backend redis postgres
 ```
 
-### 4. Create Initial Data
+## 📄 License
 
-The API will be available at `http://localhost:8000`. Access the interactive docs at `http://localhost:8000/docs`.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## API Endpoints
-
-### Core Endpoints
-
-- `GET /v1/health` - Health check
-- `POST /v1/chat` - Chat with bots (supports streaming)
-
-### Admin Endpoints (Coming Soon)
-
-- Bot management
-- Dataset and document upload
-- API key management
-- Tenant configuration
-
-## Development
-
-### Local Setup
-
-```bash
-# Install dependencies
-pip install -e ".[dev]"
-
-# Start PostgreSQL and Redis
-docker-compose up postgres redis -d
-
-# Run migrations
-alembic upgrade head
-
-# Start development server
-uvicorn app.main:app --reload
-
-# Run tests
-pytest
-
-# Format code
-black .
-ruff check . --fix
-```
-
-### Project Structure
-
-```
-app/
-├── main.py              # FastAPI application
-├── deps.py              # Dependencies and auth
-├── db.py                # Database configuration
-├── models.py            # SQLAlchemy models
-├── schemas.py           # Pydantic schemas
-├── routers/             # API route handlers
-│   ├── chat.py          # Chat endpoints
-│   └── health.py        # Health check
-├── services/            # Business logic
-│   ├── chat_service.py  # AI model interactions
-│   └── retrieval_service.py  # Vector search
-├── workers/             # Background job workers
-└── admin/               # Admin interface
-
-alembic/                 # Database migrations
-tests/                   # Test suite
-docker/                  # Docker configuration
-```
-
-## Configuration
-
-Key environment variables:
-
-- `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_URL` - Redis connection string
-- `OPENAI_API_KEY` - OpenAI API key for chat and embeddings
-- `SECRET_KEY` - JWT signing secret
-- `CORS_ORIGINS` - Allowed CORS origins
-
-## Database Schema
-
-Core entities:
-- **Tenants** - Multi-tenant isolation
-- **Bots** - Chat bot configurations
-- **Scopes** - Access control and guardrails
-- **Datasets** - Document collections
-- **Documents** - Individual files/content
-- **Chunks** - Document pieces with embeddings
-- **Conversations** - Chat sessions
-- **Messages** - Individual chat messages
-- **API Keys** - Authentication tokens
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run linting: `ruff check . --fix && black .`
-6. Submit a pull request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License
+## 📞 Support
 
-MIT License - see LICENSE file for details.
+For support, email support@example.com or create an issue in this repository.

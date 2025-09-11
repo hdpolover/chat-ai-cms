@@ -12,6 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
+  mounted: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,10 +20,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TenantUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    // Check if user is authenticated on mount
+    // Set mounted to true after component mounts (client-side only)
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // Only run auth initialization after component has mounted
+    if (!mounted) return;
+
     const initAuth = async () => {
       try {
         if (authService.isAuthenticated()) {
@@ -31,8 +40,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(storedUser);
           } else {
             // Verify with backend
-            const currentUser = await authService.getCurrentUser();
-            setUser(currentUser);
+            try {
+              const currentUser = await authService.getCurrentUser();
+              setUser(currentUser);
+            } catch (error) {
+              // If verification fails, clear invalid tokens
+              console.error('User verification failed:', error);
+              await authService.logout();
+            }
           }
         }
       } catch (error) {
@@ -45,12 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     initAuth();
-  }, []);
+  }, [mounted]);
 
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login({ email, password });
-      setUser(response.user);
+      setUser(response.tenant);
       router.push(CONFIG.ROUTES.DASHBOARD);
     } catch (error) {
       console.error('Login error:', error);
@@ -74,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     logout,
     isAuthenticated: !!user,
+    mounted,
   };
 
   return (

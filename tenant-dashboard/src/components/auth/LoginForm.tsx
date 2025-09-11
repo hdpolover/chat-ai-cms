@@ -33,7 +33,7 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, mounted } = useAuth();
   const router = useRouter();
 
   const {
@@ -44,12 +44,12 @@ export default function LoginForm() {
     resolver: zodResolver(loginSchema),
   });
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (only after mounting)
   React.useEffect(() => {
-    if (isAuthenticated) {
+    if (mounted && isAuthenticated) {
       router.push(CONFIG.ROUTES.DASHBOARD);
     }
-  }, [isAuthenticated, router]);
+  }, [mounted, isAuthenticated, router]);
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
@@ -68,7 +68,8 @@ export default function LoginForm() {
     }
   };
 
-  if (isAuthenticated) {
+  // Don't render login form if already authenticated (prevents flash)
+  if (mounted && isAuthenticated) {
     return null; // Will redirect
   }
 

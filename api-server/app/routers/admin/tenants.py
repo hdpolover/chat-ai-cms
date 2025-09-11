@@ -8,12 +8,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func, desc, asc, Integer
 from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
 from ...db import get_sync_db
 from ...models import AdminUser, Tenant, Bot, Conversation, Message, TenantAIProvider
 from .auth import get_current_admin_user
 
 router = APIRouter(prefix="/admin/tenants", tags=["Admin - Tenants"])
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # Pydantic models
@@ -31,6 +35,11 @@ class TenantResponse(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    email: Optional[str] = None  # Tenant login email
+    is_email_verified: Optional[bool] = None
+    last_login_at: Optional[datetime] = None
+    login_attempts: Optional[int] = None
+    locked_until: Optional[datetime] = None
     owner_email: Optional[str] = None
     plan: str
     is_active: bool
@@ -50,6 +59,8 @@ class CreateTenantRequest(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    email: Optional[str] = None  # Tenant login email
+    password: Optional[str] = None  # Tenant login password
     owner_email: Optional[str] = None
     plan: str = "free"
     is_active: bool = True
@@ -62,6 +73,8 @@ class UpdateTenantRequest(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     description: Optional[str] = None
+    email: Optional[str] = None  # Tenant login email
+    password: Optional[str] = None  # New password (optional)
     owner_email: Optional[str] = None
     plan: Optional[str] = None
     is_active: Optional[bool] = None
@@ -281,18 +294,36 @@ async def create_tenant(
             detail="Tenant with this slug already exists"
         )
     
+    # Check if email already exists (if provided)
+    if tenant_data.email:
+        existing_email = db.query(Tenant).filter(Tenant.email == tenant_data.email).first()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tenant with this email already exists"
+            )
+    
+    # Hash password if provided
+    password_hash = None
+    if tenant_data.password:
+        password_hash = pwd_context.hash(tenant_data.password)
+    
     # Create new tenant
     tenant = Tenant(
         id=str(uuid4()),
         name=tenant_data.name,
         slug=tenant_data.slug,
         description=tenant_data.description,
+        email=tenant_data.email,
+        password_hash=password_hash,
+        is_email_verified=True if tenant_data.email else False,
         owner_email=tenant_data.owner_email,
         plan=tenant_data.plan,
         is_active=tenant_data.is_active,
         settings=tenant_data.settings or {},
         global_rate_limit=tenant_data.global_rate_limit or 1000,
-        feature_flags=tenant_data.feature_flags or {}
+        feature_flags=tenant_data.feature_flags or {},
+        login_attempts=0
     )
     
     db.add(tenant)
@@ -306,11 +337,19 @@ async def create_tenant(
         name=tenant.name,
         slug=tenant.slug,
         description=tenant.description,
+        email=tenant.email,
+        is_email_verified=tenant.is_email_verified,
+        last_login_at=tenant.last_login_at,
+        login_attempts=tenant.login_attempts,
+        locked_until=tenant.locked_until,
         owner_email=tenant.owner_email,
         plan=tenant.plan,
         is_active=tenant.is_active,
-        created_at=tenant.created_at.isoformat(),
-        updated_at=tenant.updated_at.isoformat(),
+        settings=tenant.settings,
+        global_rate_limit=tenant.global_rate_limit,
+        feature_flags=tenant.feature_flags,
+        created_at=tenant.created_at,
+        updated_at=tenant.updated_at,
         usage_stats=usage_stats
     )
 

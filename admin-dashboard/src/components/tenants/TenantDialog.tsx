@@ -51,6 +51,8 @@ const tenantSchema = z.object({
     .max(100, 'Slug must be less than 100 characters')
     .regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens'),
   description: z.string().optional(),
+  email: z.string().email('Please enter a valid email address').optional().or(z.literal('')),
+  password: z.string().min(6, 'Password must be at least 6 characters').optional().or(z.literal('')),
   owner_email: z.string().email('Please enter a valid email address').optional().or(z.literal('')),
   plan: z.enum(['free', 'pro', 'enterprise']),
   is_active: z.boolean(),
@@ -97,6 +99,8 @@ export default function TenantDialog({
       name: '',
       slug: '',
       description: '',
+      email: '',
+      password: '',
       owner_email: '',
       plan: 'free',
       is_active: true,
@@ -135,6 +139,8 @@ export default function TenantDialog({
       setValue('name', tenant.name);
       setValue('slug', tenant.slug);
       setValue('description', tenant.description || '');
+      setValue('email', tenant.email || '');
+      setValue('password', ''); // Don't populate password field for security
       setValue('owner_email', tenant.owner_email || '');
       setValue('plan', tenant.plan);
       setValue('is_active', tenant.is_active);
@@ -262,10 +268,42 @@ export default function TenantDialog({
                         <Grid item xs={12} md={6}>
                           <Box sx={{ mb: 2 }}>
                             <Typography variant="body2" color="text.secondary" gutterBottom>
-                              Owner Email
+                              Login Email
+                            </Typography>
+                            <Typography variant="body1">
+                              {tenant?.email || 'No login configured'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Owner Contact Email
                             </Typography>
                             <Typography variant="body1">
                               {tenant?.owner_email || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Email Verified
+                            </Typography>
+                            <Chip
+                              label={tenant?.is_email_verified ? 'Verified' : 'Not Verified'}
+                              color={tenant?.is_email_verified ? 'success' : 'warning'}
+                              size="small"
+                            />
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Last Login
+                            </Typography>
+                            <Typography variant="body1">
+                              {tenant?.last_login_at ? new Date(tenant.last_login_at).toLocaleString() : 'Never'}
                             </Typography>
                           </Box>
                         </Grid>
@@ -523,12 +561,36 @@ export default function TenantDialog({
             
             <Grid item xs={12} md={6}>
               <TextField
+                {...register('email')}
+                fullWidth
+                label="Tenant Login Email"
+                type="email"
+                error={!!errors.email}
+                helperText={errors.email?.message || 'Email for tenant authentication'}
+                disabled={isReadOnly}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                {...register('password')}
+                fullWidth
+                label={mode === 'create' ? 'Password' : 'New Password'}
+                type="password"
+                error={!!errors.password}
+                helperText={errors.password?.message || (mode === 'edit' ? 'Leave blank to keep existing' : 'Minimum 6 characters')}
+                disabled={isReadOnly}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
                 {...register('owner_email')}
                 fullWidth
-                label="Owner Email"
+                label="Owner Contact Email"
                 type="email"
                 error={!!errors.owner_email}
-                helperText={errors.owner_email?.message}
+                helperText={errors.owner_email?.message || 'Contact email (optional)'}
                 disabled={isReadOnly}
               />
             </Grid>

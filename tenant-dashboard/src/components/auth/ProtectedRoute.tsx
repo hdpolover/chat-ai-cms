@@ -11,16 +11,18 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, mounted } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    // Only redirect after component has mounted and auth check is complete
+    if (mounted && !loading && !isAuthenticated) {
       router.push(CONFIG.ROUTES.LOGIN);
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, mounted, router]);
 
-  if (loading) {
+  // Show loading until component is mounted and auth is determined
+  if (!mounted || loading) {
     return (
       <Box
         display="flex"
