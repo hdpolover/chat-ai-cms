@@ -73,7 +73,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -168,6 +168,14 @@ try:
     logger.info("Full admin routes loaded successfully with Python 3.12")
 except ImportError as e:
     logger.warning("Admin routes not available", error=str(e))
+
+# Include tenant routers
+try:
+    from .routers.tenant import auth as tenant_auth
+    app.include_router(tenant_auth.router)
+    logger.info("Tenant routes loaded successfully")
+except ImportError as e:
+    logger.warning("Tenant routes not available", error=str(e))
 
 
 @app.get("/")
