@@ -171,12 +171,13 @@ except ImportError as e:
 
 # Include tenant routers
 try:
-    from .routers.tenant import auth as tenant_auth, bots as tenant_bots, ai_providers as tenant_ai_providers, datasets as tenant_datasets, documents as tenant_documents
+    from .routers.tenant import auth as tenant_auth, bots as tenant_bots, ai_providers as tenant_ai_providers, datasets as tenant_datasets, documents as tenant_documents, dashboard as tenant_dashboard
     app.include_router(tenant_auth.router)
     app.include_router(tenant_bots.router)
     app.include_router(tenant_ai_providers.router)
     app.include_router(tenant_datasets.router)
     app.include_router(tenant_documents.router)
+    app.include_router(tenant_dashboard.router)
     logger.info("Tenant routes loaded successfully")
 except ImportError as e:
     logger.warning("Tenant routes not available", error=str(e))

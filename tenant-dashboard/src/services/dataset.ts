@@ -1,5 +1,4 @@
 import { apiClient } from './api';
-import { CONFIG } from '@/config';
 
 export interface Dataset {
   id: string;
@@ -7,6 +6,10 @@ export interface Dataset {
   description?: string;
   tags: string[];
   created_at: string;
+  updated_at?: string;
+  is_active?: boolean;
+  document_count?: number;
+  total_chunks?: number;
 }
 
 export interface CreateDatasetRequest {
@@ -22,6 +25,17 @@ export interface UpdateDatasetRequest {
 }
 
 export class DatasetService {
+  // Get all datasets for the tenant
+  static async getDatasets(): Promise<Dataset[]> {
+    try {
+      const response = await apiClient.get<Dataset[]>('/v1/tenant/datasets/');
+      return response || [];
+    } catch (error) {
+      console.error('Failed to fetch datasets:', error);
+      throw error;
+    }
+  }
+
   // Get available datasets for bot assignment
   static async getAvailableDatasets(): Promise<Dataset[]> {
     try {
@@ -36,24 +50,13 @@ export class DatasetService {
   // Create a new dataset
   static async createDataset(datasetData: CreateDatasetRequest): Promise<Dataset> {
     try {
-      const response = await apiClient.post<Dataset>('/v1/tenant/datasets', datasetData);
+      const response = await apiClient.post<Dataset>('/v1/tenant/datasets/', datasetData);
       if (!response) {
         throw new Error('Failed to create dataset');
       }
       return response;
     } catch (error) {
       console.error('Failed to create dataset:', error);
-      throw error;
-    }
-  }
-
-  // Get all datasets for the tenant
-  static async getDatasets(): Promise<Dataset[]> {
-    try {
-      const response = await apiClient.get<Dataset[]>('/v1/tenant/datasets');
-      return response || [];
-    } catch (error) {
-      console.error('Failed to fetch datasets:', error);
       throw error;
     }
   }
@@ -82,6 +85,17 @@ export class DatasetService {
     }
   }
 
+  // Get dataset statistics
+  static async getDatasetStats(datasetId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/v1/tenant/datasets/${datasetId}/stats`);
+      return response;
+    } catch (error) {
+      console.error(`Failed to get dataset stats ${datasetId}:`, error);
+      throw error;
+    }
+  }
+
   // Assign dataset to bot
   static async assignDatasetToBot(botId: string, datasetId: string, priority: number = 1): Promise<void> {
     try {
@@ -98,6 +112,17 @@ export class DatasetService {
       await apiClient.delete(`/v1/tenant/bots/${botId}/datasets/${datasetId}`);
     } catch (error) {
       console.error(`Failed to remove dataset ${datasetId} from bot ${botId}:`, error);
+      throw error;
+    }
+  }
+
+  // Get datasets assigned to a bot
+  static async getBotDatasets(botId: string): Promise<any[]> {
+    try {
+      const response = await apiClient.get(`/v1/tenant/bots/${botId}/datasets`);
+      return Array.isArray(response) ? response : [];
+    } catch (error) {
+      console.error(`Failed to get datasets for bot ${botId}:`, error);
       throw error;
     }
   }

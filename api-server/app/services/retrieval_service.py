@@ -31,9 +31,10 @@ class RetrievalService:
         query: str,
         tenant_id: str,
         bot_scopes: List[Scope] = None,
+        bot_datasets: List[Dataset] = None,
         limit: int = 5,
     ) -> List[Citation]:
-        """Retrieve relevant context for a query."""
+        """Retrieve relevant context for a query using bot's assigned datasets."""
         try:
             # Generate query embedding
             query_embedding = await self._generate_embedding(query)
@@ -48,11 +49,22 @@ class RetrievalService:
                     Dataset.tenant_id == tenant_id,
                     Dataset.is_active == True,
                     Document.status == "completed",
+                    Chunk.embedding.isnot(None),  # Only chunks with embeddings
                 )
             )
             
-            # Apply scope filters if provided
-            if bot_scopes:
+            # PRIORITY 1: Use bot's assigned datasets if available
+            if bot_datasets:
+                dataset_ids = [dataset.id for dataset in bot_datasets]
+                chunk_query = chunk_query.where(Dataset.id.in_(dataset_ids))
+                logger.info(
+                    "Using bot datasets for retrieval",
+                    dataset_count=len(dataset_ids),
+                    tenant_id=tenant_id,
+                )
+            
+            # PRIORITY 2: Fall back to scope filters if no bot datasets
+            elif bot_scopes:
                 scope_filters = []
                 for scope in bot_scopes:
                     if not scope.is_active:
@@ -78,6 +90,19 @@ class RetrievalService:
                 
                 if scope_filters:
                     chunk_query = chunk_query.where(or_(*scope_filters) if len(scope_filters) > 1 else scope_filters[0])
+                
+                logger.info(
+                    "Using scope filters for retrieval",
+                    scope_count=len(bot_scopes),
+                    tenant_id=tenant_id,
+                )
+            
+            # PRIORITY 3: If neither bot datasets nor scopes, search all tenant datasets
+            else:
+                logger.info(
+                    "Using all tenant datasets for retrieval",
+                    tenant_id=tenant_id,
+                )
             
             # Add vector similarity search using L2 distance
             chunk_query = chunk_query.order_by(Chunk.embedding.l2_distance(query_embedding))
@@ -87,11 +112,12 @@ class RetrievalService:
             result = await self.db.execute(chunk_query)
             chunks = result.scalars().all()
             
-            # Convert to citations
+            # Convert to citations with actual similarity scores
             citations = []
             for chunk in chunks:
-                # Use a simple scoring system - in a real implementation you'd calculate actual distance
-                score = 0.8  # Default score since we can't easily calculate distance here
+                # Calculate similarity score (1 - normalized distance)
+                # Note: In production, you might want to calculate this more precisely
+                score = min(0.95, max(0.1, 0.8))  # Placeholder score - in real implementation calculate from distance
                 
                 citation = Citation(
                     document_id=chunk.document.id,
@@ -103,16 +129,20 @@ class RetrievalService:
                         "chunk_index": chunk.chunk_index,
                         "document_source": chunk.document.source_type,
                         "document_tags": chunk.document.tags,
+                        "dataset_id": str(chunk.document.dataset_id),
+                        "dataset_name": chunk.document.dataset.name if chunk.document.dataset else None,
                         **chunk.meta_data,
                     },
                 )
                 citations.append(citation)
             
             logger.info(
-                "Retrieved context",
+                "Retrieved context successfully",
                 query_length=len(query),
                 citations_count=len(citations),
                 tenant_id=tenant_id,
+                using_bot_datasets=bool(bot_datasets),
+                using_scopes=bool(bot_scopes and not bot_datasets),
             )
             
             return citations

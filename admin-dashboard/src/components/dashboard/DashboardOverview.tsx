@@ -32,6 +32,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { dashboardService } from '@/services';
+import { tenantService } from '@/services/tenant';
 import { formatDistanceToNow } from 'date-fns';
 
 interface StatCardProps {
@@ -149,6 +150,14 @@ export default function DashboardOverview() {
     queryFn: () => dashboardService.getMetrics(chartPeriod),
   });
 
+  const {
+    data: recentTenantsData,
+    isLoading: tenantsLoading,
+  } = useQuery({
+    queryKey: ['recent-tenants'],
+    queryFn: () => tenantService.getTenants({ per_page: 5 }),
+  });
+
   const handlePeriodMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -162,22 +171,9 @@ export default function DashboardOverview() {
     handlePeriodMenuClose();
   };
 
-  // Mock data for charts (replace with actual API data)
-  const chartData = metrics || [
-    { name: '00:00', chats: 4, messages: 24, users: 12 },
-    { name: '04:00', chats: 3, messages: 18, users: 9 },
-    { name: '08:00', chats: 8, messages: 45, users: 23 },
-    { name: '12:00', chats: 15, messages: 89, users: 41 },
-    { name: '16:00', chats: 22, messages: 124, users: 67 },
-    { name: '20:00', chats: 18, messages: 96, users: 52 },
-  ];
-
-    // Mock data for recent tenants with static dates
-  const recentTenants = [
-    { id: '1', name: 'Acme Corp', status: 'active', plan: 'pro', lastActivity: '2025-09-10T10:30:00Z' },
-    { id: '2', name: 'Tech Start', status: 'active', plan: 'free', lastActivity: '2025-09-10T09:30:00Z' },
-    { id: '3', name: 'Big Enterprise', status: 'active', plan: 'enterprise', lastActivity: '2025-09-10T08:30:00Z' },
-  ];
+  // Use real data from API or fallback to empty array
+  const chartData = metrics || [];
+  const recentTenants = recentTenantsData?.items || [];
 
   if (statsLoading) {
     return (
@@ -296,31 +292,41 @@ export default function DashboardOverview() {
                         <TableRow>
                           <TableCell>Name</TableCell>
                           <TableCell>Plan</TableCell>
-                          <TableCell>Last Active</TableCell>
+                          <TableCell>Status</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {recentTenants.map((tenant) => (
-                          <TableRow key={tenant.id}>
-                            <TableCell>
-                              <Typography variant="body2" fontWeight={500}>
-                                {tenant.name}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={tenant.plan}
-                                size="small"
-                                color={tenant.plan === 'enterprise' ? 'primary' : 'default'}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="caption" color="text.secondary">
-                                {formatDistanceToNow(new Date(tenant.lastActivity), { addSuffix: true })}
-                              </Typography>
+                        {tenantsLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={3}>
+                              <LinearProgress />
                             </TableCell>
                           </TableRow>
-                        ))}
+                        ) : (
+                          recentTenants.map((tenant) => (
+                            <TableRow key={tenant.id}>
+                              <TableCell>
+                                <Typography variant="body2" fontWeight={500}>
+                                  {tenant.name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={tenant.plan}
+                                  size="small"
+                                  color={tenant.plan === 'enterprise' ? 'primary' : 'default'}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={tenant.is_active ? 'Active' : 'Inactive'}
+                                  size="small"
+                                  color={tenant.is_active ? 'success' : 'default'}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </TableContainer>

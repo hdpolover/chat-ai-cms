@@ -12,6 +12,7 @@ export const CONFIG = {
     TENANT_ANALYTICS: '/v1/tenant/analytics',
     TENANT_SETTINGS: '/v1/tenant/settings',
     TENANT_DOCUMENTS: '/v1/tenant/documents',
+    TENANT_DATASETS: '/v1/tenant/datasets',
   },
   
   // Storage Keys
@@ -25,10 +26,11 @@ export const CONFIG = {
   ROUTES: {
     LOGIN: '/login',
     DASHBOARD: '/dashboard',
+    DATASETS: '/datasets',
+    DOCUMENTS: '/documents',
     BOTS: '/bots',
     CHAT: '/chat',
     ANALYTICS: '/analytics',
     SETTINGS: '/settings',
-    DOCUMENTS: '/documents',
   },
 } as const;

@@ -316,6 +316,7 @@ class DocumentResponse(DocumentBase):
     file_size: Optional[int]
     created_at: datetime
     updated_at: datetime
+    dataset_name: Optional[str] = None
 
 
 # API Key schemas

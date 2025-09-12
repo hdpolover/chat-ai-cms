@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { 
   Grid, 
   Card, 
@@ -28,67 +29,31 @@ import {
 } from '@mui/icons-material';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import TenantLayout from '@/components/layout/TenantLayout';
-
-interface DashboardStats {
-  totalBots: number;
-  totalDocuments: number;
-  totalConversations: number;
-  totalApiKeys: number;
-}
-
-interface RecentBot {
-  id: string;
-  name: string;
-  status: 'active' | 'inactive';
-  conversations: number;
-  lastUsed: string;
-}
+import { tenantDashboardService } from '@/services/dashboard';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalBots: 0,
-    totalDocuments: 0,
-    totalConversations: 0,
-    totalApiKeys: 0,
-  });
-  
-  const [recentBots, setRecentBots] = useState<RecentBot[]>([]);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedBot, setSelectedBot] = useState<string | null>(null);
 
-  // Mock data - replace with actual API calls
-  useEffect(() => {
-    setStats({
-      totalBots: 5,
-      totalDocuments: 23,
-      totalConversations: 156,
-      totalApiKeys: 3,
-    });
+  // Fetch dashboard stats
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    error: statsError,
+  } = useQuery({
+    queryKey: ['tenant-dashboard-stats'],
+    queryFn: tenantDashboardService.getStats,
+  });
 
-    setRecentBots([
-      {
-        id: '1',
-        name: 'Customer Support Bot',
-        status: 'active',
-        conversations: 45,
-        lastUsed: '2 hours ago',
-      },
-      {
-        id: '2',
-        name: 'Product FAQ Bot',
-        status: 'active',
-        conversations: 23,
-        lastUsed: '5 hours ago',
-      },
-      {
-        id: '3',
-        name: 'Sales Assistant',
-        status: 'inactive',
-        conversations: 8,
-        lastUsed: '2 days ago',
-      },
-    ]);
-  }, []);
+  // Fetch recent bots
+  const {
+    data: recentBots,
+    isLoading: botsLoading,
+  } = useQuery({
+    queryKey: ['recent-bots'],
+    queryFn: () => tenantDashboardService.getRecentBots(3),
+  });
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, botId: string) => {
     setAnchorEl(event.currentTarget);
@@ -103,33 +68,45 @@ export default function DashboardPage() {
   const statCards = [
     {
       title: 'Total Bots',
-      value: stats.totalBots,
+      value: stats?.totalBots || 0,
       icon: SmartToy,
       color: '#1976d2',
       growth: '+12%',
     },
     {
       title: 'Documents',
-      value: stats.totalDocuments,
+      value: stats?.totalDocuments || 0,
       icon: InsertDriveFile,
       color: '#2e7d32',
       growth: '+5%',
     },
     {
       title: 'Conversations',
-      value: stats.totalConversations,
+      value: stats?.totalConversations || 0,
       icon: Chat,
       color: '#ed6c02',
       growth: '+23%',
     },
     {
       title: 'API Keys',
-      value: stats.totalApiKeys,
+      value: stats?.totalApiKeys || 0,
       icon: Api,
       color: '#9c27b0',
       growth: '0%',
     },
   ];
+
+  if (statsLoading) {
+    return (
+      <ProtectedRoute>
+        <TenantLayout>
+          <Box sx={{ width: '100%', mt: 2 }}>
+            <LinearProgress />
+          </Box>
+        </TenantLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>
@@ -192,47 +169,53 @@ export default function DashboardPage() {
                 Recent Bots
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {recentBots.map((bot) => (
-                  <Box
-                    key={bot.id}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      p: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 2,
-                      '&:hover': {
-                        backgroundColor: 'grey.50',
-                      },
-                    }}
-                  >
-                    <Box sx={{ mr: 2 }}>
-                      <SmartToy sx={{ color: 'primary.main', fontSize: 24 }} />
-                    </Box>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
-                        {bot.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {bot.conversations} conversations • Last used {bot.lastUsed}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip 
-                        label={bot.status} 
-                        color={bot.status === 'active' ? 'success' : 'default'}
-                        size="small"
-                      />
-                      <IconButton 
-                        size="small"
-                        onClick={(e) => handleMenuOpen(e, bot.id)}
-                      >
-                        <MoreVert />
-                      </IconButton>
-                    </Box>
+                {botsLoading ? (
+                  <Box sx={{ p: 2 }}>
+                    <LinearProgress />
                   </Box>
-                ))}
+                ) : (
+                  (recentBots || []).map((bot) => (
+                    <Box
+                      key={bot.id}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        p: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        '&:hover': {
+                          backgroundColor: 'grey.50',
+                        },
+                      }}
+                    >
+                      <Box sx={{ mr: 2 }}>
+                        <SmartToy sx={{ color: 'primary.main', fontSize: 24 }} />
+                      </Box>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                          {bot.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {bot.conversations_count || 0} conversations • Created {formatDistanceToNow(new Date(bot.created_at), { addSuffix: true })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip 
+                          label={bot.is_active ? 'active' : 'inactive'} 
+                          color={bot.is_active ? 'success' : 'default'}
+                          size="small"
+                        />
+                        <IconButton 
+                          size="small"
+                          onClick={(e) => handleMenuOpen(e, bot.id)}
+                        >
+                          <MoreVert />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                  ))
+                )}
               </Box>
             </Paper>
           </Grid>

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from ...db import get_sync_db
 from ...models import Tenant, Dataset, Document, Chunk
 from ...schemas import DocumentCreate, DocumentUpdate, DocumentResponse
+from ...services.job_queue_service import job_queue_service
 from .auth import get_current_tenant
 
 router = APIRouter(prefix="/v1/tenant", tags=["Tenant - Documents"])
@@ -127,6 +128,63 @@ async def list_documents(
     ]
 
 
+@router.get("/documents", response_model=List[DocumentResponse])
+async def list_all_documents(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    search: Optional[str] = Query(None, description="Search documents by title or content"),
+    dataset_id: Optional[UUID] = Query(None, description="Filter by dataset ID"),
+    status: Optional[str] = Query(None, description="Filter by processing status"),
+    db: Session = Depends(get_sync_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
+):
+    """List all documents for the current tenant across all datasets."""
+    
+    # Base query for tenant's documents with dataset info
+    query = db.query(Document).join(Dataset).filter(
+        Dataset.tenant_id == current_tenant.id
+    ).options(joinedload(Document.dataset))
+    
+    # Apply filters
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Document.title.ilike(search_term)) | 
+            (Document.content.ilike(search_term))
+        )
+    
+    if dataset_id:
+        query = query.filter(Document.dataset_id == dataset_id)
+    
+    if status:
+        query = query.filter(Document.status == status)
+    
+    # Order by created_at desc and apply pagination
+    query = query.order_by(Document.created_at.desc())
+    documents = query.offset(skip).limit(limit).all()
+    
+    # Convert to response format
+    return [
+        DocumentResponse(
+            id=str(doc.id),
+            dataset_id=str(doc.dataset_id),
+            title=doc.title,
+            source_type=doc.source_type,
+            source_url=doc.source_url,
+            tags=doc.tags,
+            metadata=doc.meta_data,
+            content_hash=doc.content_hash,
+            status=doc.status,
+            error_message=doc.error_message,
+            file_size=doc.file_size,
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+            dataset_name=doc.dataset.name if doc.dataset else None
+        )
+        for doc in documents
+    ]
+
+
 @router.post("/datasets/{dataset_id}/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def create_document_text(
     dataset_id: UUID,
@@ -183,8 +241,13 @@ async def create_document_text(
     db.commit()
     db.refresh(document)
     
-    # TODO: Trigger document processing to generate chunks and embeddings
-    # This will be implemented in the next todo item
+    # Enqueue document processing in background
+    try:
+        job_id = job_queue_service.enqueue_document_processing(str(document.id))
+        print(f"Text document processing job enqueued: {job_id}")  # Temporary logging
+    except Exception as e:
+        print(f"Failed to enqueue text processing job: {e}")  # Temporary logging
+        # Don't fail the document creation if job queueing fails
     
     return DocumentResponse(
         id=str(document.id),
@@ -311,8 +374,13 @@ async def upload_document_file(
     db.commit()
     db.refresh(document)
     
-    # TODO: Trigger document processing to generate chunks and embeddings
-    # This will be implemented in the next todo item
+    # Enqueue document processing in background
+    try:
+        job_id = job_queue_service.enqueue_document_processing(str(document.id))
+        print(f"Text document processing job enqueued: {job_id}")  # Temporary logging
+    except Exception as e:
+        print(f"Failed to enqueue text processing job: {e}")  # Temporary logging
+        # Don't fail the document creation if job queueing fails
     
     return DocumentResponse(
         id=str(document.id),

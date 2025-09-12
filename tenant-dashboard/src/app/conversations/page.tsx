@@ -21,6 +21,8 @@ import {
   TableRow,
   Paper,
   Avatar,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Chat,
@@ -34,69 +36,38 @@ import {
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import TenantLayout from '@/components/layout/TenantLayout';
 import NoSSR from '@/components/NoSSR';
-
-interface Conversation {
-  id: string;
-  title: string;
-  botName: string;
-  messageCount: number;
-  lastMessage: string;
-  lastActivity: string;
-  status: 'active' | 'completed';
-  sessionId: string;
-}
+import { conversationService, ConversationWithDetails } from '@/services/conversation';
 
 export default function ConversationsPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Mock data - replace with actual API calls
+  // Load conversations from API
   useEffect(() => {
-    setConversations([
-      {
-        id: '1',
-        title: 'Product inquiry from customer',
-        botName: 'Customer Support Bot',
-        messageCount: 12,
-        lastMessage: 'Thank you for your help!',
-        lastActivity: '2 hours ago',
-        status: 'completed',
-        sessionId: 'sess_123abc',
-      },
-      {
-        id: '2',
-        title: 'Technical support question',
-        botName: 'Customer Support Bot',
-        messageCount: 8,
-        lastMessage: 'Can you help me with installation?',
-        lastActivity: '1 hour ago',
-        status: 'active',
-        sessionId: 'sess_456def',
-      },
-      {
-        id: '3',
-        title: 'FAQ about pricing',
-        botName: 'Product FAQ Bot',
-        messageCount: 5,
-        lastMessage: 'What are your pricing plans?',
-        lastActivity: '3 hours ago',
-        status: 'completed',
-        sessionId: 'sess_789ghi',
-      },
-      {
-        id: '4',
-        title: 'Sales consultation',
-        botName: 'Sales Assistant',
-        messageCount: 15,
-        lastMessage: 'I need a custom solution',
-        lastActivity: '5 hours ago',
-        status: 'active',
-        sessionId: 'sess_012jkl',
-      },
-    ]);
+    loadConversations();
   }, []);
+
+  const loadConversations = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await conversationService.getConversations({
+        limit: 50,
+        order_by: 'updated_at',
+        order: 'desc'
+      });
+      setConversations(data);
+    } catch (err) {
+      console.error('Error loading conversations:', err);
+      setError('Failed to load conversations. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, conversationId: string) => {
     setAnchorEl(event.currentTarget);
@@ -108,10 +79,28 @@ export default function ConversationsPage() {
     setSelectedConversation(null);
   };
 
+  const handleDeleteConversation = async () => {
+    if (!selectedConversation) return;
+    
+    try {
+      const success = await conversationService.deleteConversation(selectedConversation);
+      if (success) {
+        // Remove the conversation from the list
+        setConversations(prev => prev.filter(conv => conv.id !== selectedConversation));
+        handleMenuClose();
+      } else {
+        setError('Failed to delete conversation');
+      }
+    } catch (err) {
+      console.error('Error deleting conversation:', err);
+      setError('Failed to delete conversation');
+    }
+  };
+
   const filteredConversations = conversations.filter(conversation =>
-    conversation.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conversation.botName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conversation.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
+    (conversation.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (conversation.bot_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (conversation.last_message || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -145,9 +134,24 @@ export default function ConversationsPage() {
           />
         </Box>
 
+        {/* Loading State */}
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
         {/* Conversations Table */}
-        <Card>
-          <CardContent sx={{ p: 0 }}>
+        {!loading && !error && (
+          <Card>
+            <CardContent sx={{ p: 0 }}>
             <TableContainer>
               <Table>
                 <TableHead>
@@ -171,10 +175,10 @@ export default function ConversationsPage() {
                           </Avatar>
                           <Box>
                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {conversation.title}
+                              {conversation.title || 'Untitled Conversation'}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Session: {conversation.sessionId}
+                              Session: {conversation.session_id || 'N/A'}
                             </Typography>
                           </Box>
                         </Box>
@@ -182,20 +186,20 @@ export default function ConversationsPage() {
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                           <SmartToy sx={{ fontSize: 16, color: 'primary.main', mr: 1 }} />
-                          {conversation.botName}
+                          {conversation.bot_name || 'Unknown Bot'}
                         </Box>
                       </TableCell>
-                      <TableCell>{conversation.messageCount}</TableCell>
+                      <TableCell>{conversation.messages_count || 0}</TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {conversation.lastMessage}
+                          {conversation.last_message || 'No messages yet'}
                         </Typography>
                       </TableCell>
-                      <TableCell>{conversation.lastActivity}</TableCell>
+                      <TableCell>{conversation.last_activity || 'Unknown'}</TableCell>
                       <TableCell>
                         <Chip
-                          label={conversation.status}
-                          color={conversation.status === 'active' ? 'success' : 'default'}
+                          label={conversation.is_active ? 'active' : 'completed'}
+                          color={conversation.is_active ? 'success' : 'default'}
                           size="small"
                         />
                       </TableCell>
@@ -214,6 +218,7 @@ export default function ConversationsPage() {
             </TableContainer>
           </CardContent>
         </Card>
+        )}
 
         {/* Conversation Actions Menu */}
         <Menu
@@ -227,7 +232,7 @@ export default function ConversationsPage() {
             </ListItemIcon>
             View Conversation
           </MenuItem>
-          <MenuItem onClick={handleMenuClose}>
+          <MenuItem onClick={handleDeleteConversation}>
             <ListItemIcon>
               <Delete fontSize="small" />
             </ListItemIcon>

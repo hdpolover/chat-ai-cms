@@ -9,7 +9,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, joinedload
 
 from ...db import get_sync_db
-from ...models import Tenant, Bot, TenantAIProvider, Scope, Dataset, BotDataset
+from ...models import Tenant, Bot, TenantAIProvider, Scope, Dataset, BotDataset, Document, Chunk
 from ...schemas import BotCreate, BotUpdate, BotResponse
 from .auth import get_current_tenant
 
@@ -78,7 +78,19 @@ async def create_bot(
 ):
     """Create a new bot for the current tenant."""
     
-    # Verify that the AI provider belongs to this tenant
+    # 1. Verify that the tenant has at least one active AI provider
+    tenant_ai_providers_count = db.query(TenantAIProvider).filter(
+        TenantAIProvider.tenant_id == current_tenant.id,
+        TenantAIProvider.is_active == True
+    ).count()
+    
+    if tenant_ai_providers_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create bot: Tenant must have at least one active AI provider configured. Please configure an AI provider first."
+        )
+    
+    # 2. Verify that the specific AI provider belongs to this tenant
     ai_provider = db.query(TenantAIProvider).filter(
         TenantAIProvider.id == bot_data.tenant_ai_provider_id,
         TenantAIProvider.tenant_id == current_tenant.id,
@@ -91,19 +103,41 @@ async def create_bot(
             detail="Invalid AI provider or provider not active"
         )
     
-    # Verify datasets belong to this tenant if provided
-    if bot_data.dataset_ids:
-        dataset_count = db.query(Dataset).filter(
-            Dataset.id.in_(bot_data.dataset_ids),
-            Dataset.tenant_id == current_tenant.id,
-            Dataset.is_active == True
-        ).count()
-        
-        if dataset_count != len(bot_data.dataset_ids):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="One or more datasets are invalid or not accessible"
-            )
+    # 3. Verify that at least one dataset is provided
+    if not bot_data.dataset_ids or len(bot_data.dataset_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create bot: At least one dataset must be assigned to the bot. Please create and assign a dataset first."
+        )
+    
+    # 4. Verify datasets belong to this tenant and are active
+    dataset_count = db.query(Dataset).filter(
+        Dataset.id.in_(bot_data.dataset_ids),
+        Dataset.tenant_id == current_tenant.id,
+        Dataset.is_active == True
+    ).count()
+    
+    if dataset_count != len(bot_data.dataset_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="One or more datasets are invalid or not accessible"
+        )
+    
+    # 5. Verify that assigned datasets have processed documents with embeddings
+    datasets_with_content = db.query(Dataset.id).join(
+        Document, Dataset.id == Document.dataset_id
+    ).join(
+        Chunk, Document.id == Chunk.document_id
+    ).filter(
+        Dataset.id.in_(bot_data.dataset_ids),
+        Chunk.embedding.isnot(None)  # Has embeddings
+    ).distinct().count()
+    
+    if datasets_with_content == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create bot: None of the assigned datasets have processed documents with embeddings. Please upload and process documents in the datasets first."
+        )
     
     # Create bot
     bot = Bot(
@@ -561,3 +595,44 @@ async def remove_dataset_from_bot(
     db.commit()
     
     return {"message": "Dataset removed from bot successfully"}
+
+
+@router.get("/{bot_id}/datasets", response_model=List[dict])
+async def list_bot_datasets(
+    bot_id: UUID,
+    db: Session = Depends(get_sync_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
+):
+    """List datasets assigned to a bot."""
+    
+    # Verify bot belongs to tenant
+    bot = db.query(Bot).filter(
+        Bot.id == bot_id,
+        Bot.tenant_id == current_tenant.id
+    ).first()
+    
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found"
+        )
+    
+    # Get bot-dataset relationships with dataset info
+    assignments = db.query(BotDataset, Dataset).join(
+        Dataset, BotDataset.dataset_id == Dataset.id
+    ).filter(
+        BotDataset.bot_id == bot_id
+    ).order_by(BotDataset.priority).all()
+    
+    return [
+        {
+            "id": str(dataset.id),
+            "name": dataset.name,
+            "description": dataset.description,
+            "tags": dataset.tags,
+            "priority": assignment.priority,
+            "is_active": assignment.is_active,
+            "assigned_at": assignment.created_at.isoformat()
+        }
+        for assignment, dataset in assignments
+    ]

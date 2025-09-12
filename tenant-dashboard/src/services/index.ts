@@ -5,6 +5,7 @@ export { BotService } from './bot';
 export { DocumentService } from './document';
 export { AnalyticsService } from './analytics';
 export { DatasetService } from './dataset';
+export { conversationService } from './conversation';
 
 // Re-export types from services
 export type {
@@ -25,3 +26,9 @@ export type {
   ConversationMetrics,
   UsageAnalytics,
 } from './analytics';
+
+export type {
+  ConversationWithDetails,
+  Message,
+  ConversationFilter,
+} from './conversation';

@@ -31,7 +31,8 @@ async def chat_public(
         .options(
             selectinload(Bot.scopes),
             selectinload(Bot.ai_provider),
-            selectinload(Bot.tenant)
+            selectinload(Bot.tenant),
+            selectinload(Bot.datasets)  # Load bot's datasets
         )
         .where(Bot.id == request.bot_id, Bot.is_active == True)
     )
@@ -94,6 +95,7 @@ async def _chat_completion_public(
                 query=last_user_message.content,
                 tenant_id=bot.tenant_id,
                 bot_scopes=bot.scopes,
+                bot_datasets=bot.datasets,
                 limit=5,
             )
         else:
@@ -205,7 +207,10 @@ async def chat(
     # Validate bot access
     result = await db.execute(
         select(Bot)
-        .options(selectinload(Bot.scopes))
+        .options(
+            selectinload(Bot.scopes),
+            selectinload(Bot.datasets)
+        )
         .where(Bot.id == request.bot_id, Bot.tenant_id == tenant.id, Bot.is_active == True)
     )
     bot = result.scalar_one_or_none()
@@ -257,6 +262,7 @@ async def _chat_completion(
                 query=last_user_message.content,
                 tenant_id=tenant.id,
                 bot_scopes=bot.scopes,
+                bot_datasets=bot.datasets,
                 limit=5,
             )
         else:
@@ -318,6 +324,7 @@ async def _chat_stream(
                 query=last_user_message.content,
                 tenant_id=tenant.id,
                 bot_scopes=bot.scopes,
+                bot_datasets=bot.datasets,
                 limit=5,
             )
         else:

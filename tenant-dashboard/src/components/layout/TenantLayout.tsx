@@ -37,6 +37,7 @@ import {
   InsertDriveFile,
   Analytics,
   Api,
+  Folder,
 } from '@mui/icons-material';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -49,8 +50,9 @@ interface TenantLayoutProps {
 
 const navigationItems = [
   { title: 'Dashboard', icon: Dashboard, path: '/dashboard' },
-  { title: 'Bots', icon: SmartToy, path: '/bots' },
+  { title: 'Datasets', icon: Folder, path: '/datasets' },
   { title: 'Documents', icon: InsertDriveFile, path: '/documents' },
+  { title: 'Bots', icon: SmartToy, path: '/bots' },
   { title: 'Conversations', icon: Chat, path: '/conversations' },
   { title: 'Analytics', icon: Analytics, path: '/analytics' },
 ];
