@@ -263,7 +263,7 @@ class DatasetBase(BaseSchema):
 
 class DatasetCreate(DatasetBase):
     """Dataset creation schema."""
-    tenant_id: str
+    pass  # tenant_id comes from authentication
 
 
 class DatasetUpdate(BaseSchema):
@@ -295,8 +295,8 @@ class DocumentBase(BaseSchema):
 
 class DocumentCreate(DocumentBase):
     """Document creation schema."""
-    dataset_id: str
-    content: str
+    content: str = Field(..., description="Document content")
+    # dataset_id comes from URL path
 
 
 class DocumentUpdate(BaseSchema):
