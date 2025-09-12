@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
   Button,
-  Card,
-  CardContent,
   Chip,
   IconButton,
   Menu,
@@ -29,6 +28,15 @@ import {
   Autocomplete,
   OutlinedInput,
   SelectChangeEvent,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Tooltip,
+  Avatar,
 } from '@mui/material';
 import {
   Add,
@@ -48,34 +56,17 @@ import { DatasetService, Dataset } from '@/services/dataset';
 import { Bot, CreateBotRequest, TenantAIProvider } from '@/types';
 
 export default function BotsPage() {
+  const router = useRouter();
   const [bots, setBots] = useState<Bot[]>([]);
   const [aiProviders, setAiProviders] = useState<TenantAIProvider[]>([]);
   const [availableDatasets, setAvailableDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(true);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  const [newBot, setNewBot] = useState<CreateBotRequest & { dataset_ids?: string[] }>({
-    name: '',
-    description: '',
-    tenant_ai_provider_id: '',
-    model: '',
-    system_prompt: '',
-    temperature: 0.7,
-    max_tokens: 1000,
-    settings: {},
-    is_public: false,
-    allowed_domains: [],
-    dataset_ids: [],
-  });
-
-  const [editBot, setEditBot] = useState<Partial<Bot> & { dataset_ids?: string[] }>({});
 
   useEffect(() => {
     loadData();
@@ -110,52 +101,6 @@ export default function BotsPage() {
     setSelectedBot(null);
   };
 
-  const handleCreateBot = async () => {
-    try {
-      setSaving(true);
-      await BotService.createBot(newBot);
-      setCreateDialogOpen(false);
-      setNewBot({
-        name: '',
-        description: '',
-        tenant_ai_provider_id: '',
-        model: '',
-        system_prompt: '',
-        temperature: 0.7,
-        max_tokens: 1000,
-        settings: {},
-        is_public: false,
-        allowed_domains: [],
-        dataset_ids: [],
-      });
-      await loadData();
-      setSuccess('Bot created successfully');
-    } catch (error) {
-      console.error('Failed to create bot:', error);
-      setError('Failed to create bot');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleEditBot = async () => {
-    if (!selectedBot) return;
-    
-    try {
-      setSaving(true);
-      await BotService.updateBot(selectedBot.id, editBot);
-      setEditDialogOpen(false);
-      setEditBot({});
-      await loadData();
-      setSuccess('Bot updated successfully');
-    } catch (error) {
-      console.error('Failed to update bot:', error);
-      setError('Failed to update bot');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleDeleteBot = async () => {
     if (!selectedBot) return;
     
@@ -182,25 +127,6 @@ export default function BotsPage() {
       console.error('Failed to toggle bot status:', error);
       setError('Failed to update bot status');
     }
-    handleMenuClose();
-  };
-
-  const openEditDialog = (bot: Bot) => {
-    setSelectedBot(bot);
-    setEditBot({
-      name: bot.name,
-      description: bot.description,
-      tenant_ai_provider_id: bot.tenant_ai_provider_id,
-      model: bot.model,
-      system_prompt: bot.system_prompt,
-      temperature: bot.temperature,
-      max_tokens: bot.max_tokens,
-      settings: bot.settings,
-      is_public: bot.is_public,
-      allowed_domains: bot.allowed_domains,
-      dataset_ids: bot.datasets?.map(d => d.id) || [],
-    });
-    setEditDialogOpen(true);
     handleMenuClose();
   };
 
@@ -244,7 +170,7 @@ export default function BotsPage() {
           <Button
             variant="contained"
             startIcon={<Add />}
-            onClick={() => setCreateDialogOpen(true)}
+            onClick={() => router.push('/bots/create')}
             sx={{ height: 'fit-content' }}
             disabled={aiProviders.length === 0}
           >
@@ -258,91 +184,164 @@ export default function BotsPage() {
           </Alert>
         )}
 
-        <Box sx={{ 
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-          gap: 3
-        }}>
-          {bots.map((bot) => (
-            <Card key={bot.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <CardContent sx={{ flexGrow: 1 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <SmartToy sx={{ color: 'primary.main', mr: 1 }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                        {bot.name}
+        <TableContainer component={Paper} sx={{ mt: 3 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Bot</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Provider</TableCell>
+                <TableCell>Model</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Visibility</TableCell>
+                <TableCell>Datasets</TableCell>
+                <TableCell>Config</TableCell>
+                <TableCell>Created</TableCell>
+                <TableCell align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {bots.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <SmartToy sx={{ fontSize: 48, color: 'text.secondary' }} />
+                      <Typography variant="h6" color="text.secondary">
+                        No bots found
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Create your first bot to get started
                       </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                bots.map((bot) => (
+                  <TableRow 
+                    key={bot.id} 
+                    hover 
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => router.push(`/bots/${bot.id}`)}
+                  >
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+                          <SmartToy sx={{ fontSize: 18 }} />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                            {bot.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ID: {bot.id.slice(0, 8)}...
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Typography variant="body2" sx={{ maxWidth: 200 }}>
+                        {bot.description || '-'}
+                      </Typography>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Typography variant="body2">
+                        {getProviderName(bot.tenant_ai_provider_id)}
+                      </Typography>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {bot.model}
+                      </Typography>
+                    </TableCell>
+                    
+                    <TableCell>
                       <Chip 
                         label={bot.is_active ? 'Active' : 'Inactive'} 
                         color={bot.is_active ? 'success' : 'default'}
                         size="small"
+                        variant={bot.is_active ? 'filled' : 'outlined'}
                       />
-                      {bot.is_public && (
+                    </TableCell>
+                    
+                    <TableCell>
+                      {bot.is_public ? (
                         <Chip 
                           label="Public" 
                           color="info"
                           size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Chip 
+                          label="Private" 
+                          color="default"
+                          size="small"
+                          variant="outlined"
                         />
                       )}
+                    </TableCell>
+                    
+                    <TableCell>
+                      {bot.datasets && bot.datasets.length > 0 ? (
+                        <Tooltip 
+                          title={bot.datasets.map(d => d.name).join(', ')}
+                          arrow
+                        >
+                          <Chip
+                            label={`${bot.datasets.length} dataset${bot.datasets.length > 1 ? 's' : ''}`}
+                            size="small"
+                            color="info"
+                            variant="outlined"
+                          />
+                        </Tooltip>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          None
+                        </Typography>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Temp: {bot.temperature}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Tokens: {bot.max_tokens}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(bot.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: '2-digit'
+                        })}
+                      </Typography>
+                    </TableCell>
+                    
+                    <TableCell align="center">
                       <IconButton 
                         size="small"
-                        onClick={(e) => handleMenuOpen(e, bot)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMenuOpen(e, bot);
+                        }}
                       >
                         <MoreVert />
                       </IconButton>
-                    </Box>
-                  </Box>
-                  
-                  {bot.description && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {bot.description}
-                    </Typography>
-                  )}
-                  
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Model: {bot.model}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Provider: {getProviderName(bot.tenant_ai_provider_id)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Temperature: {bot.temperature} • Max Tokens: {bot.max_tokens}
-                    </Typography>
-                    {bot.datasets && bot.datasets.length > 0 && (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          Knowledge Datasets:
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                          {bot.datasets.map((dataset) => (
-                            <Chip
-                              key={dataset.id}
-                              label={dataset.name}
-                              size="small"
-                              variant="outlined"
-                              color="info"
-                            />
-                          ))}
-                        </Box>
-                      </Box>
-                    )}
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 'auto' }}>
-                    <Typography variant="caption" color="text.secondary">
-                      Created {new Date(bot.created_at).toLocaleDateString()}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Updated {new Date(bot.updated_at).toLocaleDateString()}
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-        </Box>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
         {/* Bot Actions Menu */}
         <Menu
@@ -350,13 +349,16 @@ export default function BotsPage() {
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          <MenuItem onClick={handleMenuClose}>
+          <MenuItem onClick={() => router.push(`/bots/${selectedBot?.id}`)}>
             <ListItemIcon>
               <Visibility fontSize="small" />
             </ListItemIcon>
             View Details
           </MenuItem>
-          <MenuItem onClick={() => openEditDialog(selectedBot!)}>
+          <MenuItem onClick={() => {
+            handleMenuClose();
+            router.push(`/bots/${selectedBot?.id}/edit`);
+          }}>
             <ListItemIcon>
               <Edit fontSize="small" />
             </ListItemIcon>
@@ -377,362 +379,6 @@ export default function BotsPage() {
             Delete Bot
           </MenuItem>
         </Menu>
-
-        {/* Create Bot Dialog */}
-        <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-          <DialogTitle>Create New Bot</DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 2 }}>
-              <TextField
-                label="Bot Name"
-                value={newBot.name}
-                onChange={(e) => setNewBot({ ...newBot, name: e.target.value })}
-                fullWidth
-                required
-              />
-              
-              <TextField
-                label="Description"
-                value={newBot.description || ''}
-                onChange={(e) => setNewBot({ ...newBot, description: e.target.value })}
-                fullWidth
-                multiline
-                rows={3}
-              />
-              
-              <FormControl fullWidth required>
-                <InputLabel>AI Provider</InputLabel>
-                <Select
-                  value={newBot.tenant_ai_provider_id}
-                  label="AI Provider"
-                  onChange={(e) => {
-                    const providerId = e.target.value;
-                    setNewBot({ 
-                      ...newBot, 
-                      tenant_ai_provider_id: providerId,
-                      model: '' // Reset model when provider changes
-                    });
-                  }}
-                >
-                  {aiProviders.map((provider) => (
-                    <MenuItem key={provider.id} value={provider.id}>
-                      {provider.provider_name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <FormControl fullWidth required disabled={!newBot.tenant_ai_provider_id}>
-                <InputLabel>Model</InputLabel>
-                <Select
-                  value={newBot.model}
-                  label="Model"
-                  onChange={(e) => setNewBot({ ...newBot, model: e.target.value })}
-                >
-                  {getAvailableModels(newBot.tenant_ai_provider_id).map((model: string) => (
-                    <MenuItem key={model} value={model}>
-                      {model}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <TextField
-                label="System Prompt"
-                value={newBot.system_prompt || ''}
-                onChange={(e) => setNewBot({ ...newBot, system_prompt: e.target.value })}
-                fullWidth
-                multiline
-                rows={4}
-                placeholder="Enter instructions for how the bot should behave..."
-              />
-
-              <Box>
-                <Typography gutterBottom>Temperature: {newBot.temperature}</Typography>
-                <Slider
-                  value={newBot.temperature || 0.7}
-                  onChange={(_, value) => setNewBot({ ...newBot, temperature: value as number })}
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  marks={[
-                    { value: 0, label: '0 (Focused)' },
-                    { value: 1, label: '1 (Balanced)' },
-                    { value: 2, label: '2 (Creative)' }
-                  ]}
-                />
-              </Box>
-
-              <TextField
-                label="Max Tokens"
-                type="number"
-                value={newBot.max_tokens || 1000}
-                onChange={(e) => setNewBot({ ...newBot, max_tokens: parseInt(e.target.value) || 1000 })}
-                fullWidth
-                inputProps={{ min: 1, max: 4096 }}
-              />
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={newBot.is_public || false}
-                    onChange={(e) => setNewBot({ ...newBot, is_public: e.target.checked })}
-                  />
-                }
-                label="Public Bot (accessible to all users)"
-              />
-
-              {newBot.is_public && (
-                <TextField
-                  label="Allowed Domains (comma-separated)"
-                  value={newBot.allowed_domains?.join(', ') || ''}
-                  onChange={(e) => setNewBot({ 
-                    ...newBot, 
-                    allowed_domains: e.target.value.split(',').map(d => d.trim()).filter(d => d)
-                  })}
-                  fullWidth
-                  placeholder="example.com, another.com"
-                  helperText="Leave empty to allow all domains"
-                />
-              )}
-
-              <FormControl fullWidth>
-                <InputLabel>Knowledge Datasets</InputLabel>
-                <Select
-                  multiple
-                  value={newBot.dataset_ids || []}
-                  onChange={(e) => {
-                    const value = typeof e.target.value === 'string' ? [e.target.value] : e.target.value;
-                    setNewBot({ ...newBot, dataset_ids: value });
-                  }}
-                  input={<OutlinedInput label="Knowledge Datasets" />}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {selected.map((datasetId) => {
-                        const dataset = availableDatasets.find(d => d.id === datasetId);
-                        return (
-                          <Chip
-                            key={datasetId}
-                            label={dataset?.name || datasetId}
-                            size="small"
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {availableDatasets.map((dataset) => (
-                    <MenuItem key={dataset.id} value={dataset.id}>
-                      <Box>
-                        <Typography variant="body2">{dataset.name}</Typography>
-                        {dataset.description && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            {dataset.description}
-                          </Typography>
-                        )}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-                {availableDatasets.length === 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                    No datasets available. Create datasets first to assign them to bots.
-                  </Typography>
-                )}
-              </FormControl>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCreateDialogOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button 
-              variant="contained" 
-              onClick={handleCreateBot} 
-              disabled={!newBot.name || !newBot.tenant_ai_provider_id || !newBot.model || saving}
-            >
-              {saving ? <CircularProgress size={20} /> : 'Create Bot'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Edit Bot Dialog */}
-        <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="md" fullWidth>
-          <DialogTitle>Edit Bot</DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 2 }}>
-              <TextField
-                label="Bot Name"
-                value={editBot.name || ''}
-                onChange={(e) => setEditBot({ ...editBot, name: e.target.value })}
-                fullWidth
-                required
-              />
-              
-              <TextField
-                label="Description"
-                value={editBot.description || ''}
-                onChange={(e) => setEditBot({ ...editBot, description: e.target.value })}
-                fullWidth
-                multiline
-                rows={3}
-              />
-              
-              <FormControl fullWidth required>
-                <InputLabel>AI Provider</InputLabel>
-                <Select
-                  value={editBot.tenant_ai_provider_id || ''}
-                  label="AI Provider"
-                  onChange={(e) => {
-                    const providerId = e.target.value;
-                    setEditBot({ 
-                      ...editBot, 
-                      tenant_ai_provider_id: providerId,
-                      model: '' // Reset model when provider changes
-                    });
-                  }}
-                >
-                  {aiProviders.map((provider) => (
-                    <MenuItem key={provider.id} value={provider.id}>
-                      {provider.provider_name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <FormControl fullWidth required disabled={!editBot.tenant_ai_provider_id}>
-                <InputLabel>Model</InputLabel>
-                <Select
-                  value={editBot.model || ''}
-                  label="Model"
-                  onChange={(e) => setEditBot({ ...editBot, model: e.target.value })}
-                >
-                  {getAvailableModels(editBot.tenant_ai_provider_id || '').map((model: string) => (
-                    <MenuItem key={model} value={model}>
-                      {model}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <TextField
-                label="System Prompt"
-                value={editBot.system_prompt || ''}
-                onChange={(e) => setEditBot({ ...editBot, system_prompt: e.target.value })}
-                fullWidth
-                multiline
-                rows={4}
-                placeholder="Enter instructions for how the bot should behave..."
-              />
-
-              <Box>
-                <Typography gutterBottom>Temperature: {editBot.temperature || 0.7}</Typography>
-                <Slider
-                  value={editBot.temperature || 0.7}
-                  onChange={(_, value) => setEditBot({ ...editBot, temperature: value as number })}
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  marks={[
-                    { value: 0, label: '0 (Focused)' },
-                    { value: 1, label: '1 (Balanced)' },
-                    { value: 2, label: '2 (Creative)' }
-                  ]}
-                />
-              </Box>
-
-              <TextField
-                label="Max Tokens"
-                type="number"
-                value={editBot.max_tokens || 1000}
-                onChange={(e) => setEditBot({ ...editBot, max_tokens: parseInt(e.target.value) || 1000 })}
-                fullWidth
-                inputProps={{ min: 1, max: 4096 }}
-              />
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={editBot.is_public || false}
-                    onChange={(e) => setEditBot({ ...editBot, is_public: e.target.checked })}
-                  />
-                }
-                label="Public Bot (accessible to all users)"
-              />
-
-              {editBot.is_public && (
-                <TextField
-                  label="Allowed Domains (comma-separated)"
-                  value={editBot.allowed_domains?.join(', ') || ''}
-                  onChange={(e) => setEditBot({ 
-                    ...editBot, 
-                    allowed_domains: e.target.value.split(',').map(d => d.trim()).filter(d => d)
-                  })}
-                  fullWidth
-                  placeholder="example.com, another.com"
-                  helperText="Leave empty to allow all domains"
-                />
-              )}
-
-              <FormControl fullWidth>
-                <InputLabel>Knowledge Datasets</InputLabel>
-                <Select
-                  multiple
-                  value={editBot.dataset_ids || []}
-                  onChange={(e) => {
-                    const value = typeof e.target.value === 'string' ? [e.target.value] : e.target.value;
-                    setEditBot({ ...editBot, dataset_ids: value });
-                  }}
-                  input={<OutlinedInput label="Knowledge Datasets" />}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {selected.map((datasetId) => {
-                        const dataset = availableDatasets.find(d => d.id === datasetId);
-                        return (
-                          <Chip
-                            key={datasetId}
-                            label={dataset?.name || datasetId}
-                            size="small"
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {availableDatasets.map((dataset) => (
-                    <MenuItem key={dataset.id} value={dataset.id}>
-                      <Box>
-                        <Typography variant="body2">{dataset.name}</Typography>
-                        {dataset.description && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            {dataset.description}
-                          </Typography>
-                        )}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-                {availableDatasets.length === 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                    No datasets available. Create datasets first to assign them to bots.
-                  </Typography>
-                )}
-              </FormControl>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setEditDialogOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button 
-              variant="contained" 
-              onClick={handleEditBot} 
-              disabled={!editBot.name || !editBot.tenant_ai_provider_id || !editBot.model || saving}
-            >
-              {saving ? <CircularProgress size={20} /> : 'Update Bot'}
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
