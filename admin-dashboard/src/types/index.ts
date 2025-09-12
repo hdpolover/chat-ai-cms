@@ -3,9 +3,10 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'super_admin';
+  role: string; // Changed from specific enum to string to match backend
+  is_active: boolean;
+  last_login_at?: string;
   created_at: string;
-  updated_at: string;
 }
 
 export interface Tenant {
@@ -102,7 +103,7 @@ export interface LoginRequest {
 
 export interface AuthResponse {
   access_token: string;
-  refresh_token: string;
+  token_type: string;
   user: User;
 }
 

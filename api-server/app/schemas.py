@@ -122,7 +122,10 @@ class BotBase(BaseSchema):
 
 class BotCreate(BotBase):
     """Bot creation schema."""
-    tenant_id: str
+    tenant_ai_provider_id: str = Field(..., description="Tenant AI provider ID")
+    is_public: bool = Field(False, description="Whether the bot is public")
+    allowed_domains: List[str] = Field(default_factory=list, description="Allowed domains for public bots")
+    dataset_ids: List[str] = Field(default_factory=list, description="Dataset IDs to assign to the bot")
 
 
 class BotUpdate(BaseSchema):
@@ -135,14 +138,85 @@ class BotUpdate(BaseSchema):
     max_tokens: Optional[int] = Field(None, gt=0)
     is_active: Optional[bool] = None
     settings: Optional[Dict[str, Any]] = None
+    tenant_ai_provider_id: Optional[str] = None
+    is_public: Optional[bool] = None
+    allowed_domains: Optional[List[str]] = None
+    dataset_ids: Optional[List[str]] = Field(None, description="Dataset IDs to assign to the bot")
 
 
 class BotResponse(BotBase):
     """Bot response schema."""
     id: str
     tenant_id: str
+    tenant_ai_provider_id: str
+    is_public: bool = False
+    allowed_domains: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+    ai_provider_name: Optional[str] = None
+    scopes: List[Dict[str, Any]] = Field(default_factory=list)
+    datasets: List[Dict[str, Any]] = Field(default_factory=list, description="Assigned datasets")
+
+
+# BotDataset schemas
+class BotDatasetBase(BaseSchema):
+    """Base bot-dataset relationship schema."""
+    is_active: bool = Field(True)
+    priority: int = Field(1, description="Priority for dataset ordering")
+
+
+class BotDatasetCreate(BotDatasetBase):
+    """Bot-dataset relationship creation schema."""
+    bot_id: str
+    dataset_id: str
+
+
+class BotDatasetUpdate(BaseSchema):
+    """Bot-dataset relationship update schema."""
+    is_active: Optional[bool] = None
+    priority: Optional[int] = None
+
+
+class BotDatasetResponse(BotDatasetBase):
+    """Bot-dataset relationship response schema."""
+    id: str
+    bot_id: str
+    dataset_id: str
+    created_at: datetime
+
+
+# TenantAIProvider schemas
+class TenantAIProviderBase(BaseSchema):
+    """Base tenant AI provider schema."""
+    provider_name: str = Field(..., max_length=50, description="Provider name (openai, anthropic, google, etc.)")
+    base_url: Optional[str] = Field(None, max_length=255, description="Custom endpoint URL")
+    custom_settings: Dict[str, Any] = Field(default_factory=dict, description="Provider-specific settings")
+    is_active: bool = Field(True, description="Whether the provider is active")
+
+
+class TenantAIProviderCreate(TenantAIProviderBase):
+    """Tenant AI provider creation schema."""
+    global_ai_provider_id: str = Field(..., description="Global AI provider ID")
+    api_key: str = Field(..., description="API key for the provider")
+
+
+class TenantAIProviderUpdate(BaseSchema):
+    """Tenant AI provider update schema."""
+    provider_name: Optional[str] = Field(None, max_length=50)
+    api_key: Optional[str] = None
+    base_url: Optional[str] = Field(None, max_length=255)
+    custom_settings: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+
+class TenantAIProviderResponse(TenantAIProviderBase):
+    """Tenant AI provider response schema."""
+    id: str
+    tenant_id: str
+    global_ai_provider_id: str
+    created_at: datetime
+    updated_at: datetime
+    # Note: api_key is not included in response for security
 
 
 # Scope schemas

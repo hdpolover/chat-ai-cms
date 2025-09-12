@@ -82,7 +82,7 @@ class TenantAIProvider(Base):
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     tenant_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=False)
-    ai_provider_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("ai_providers_master.id"), nullable=False)
+    global_ai_provider_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("global_ai_providers.id"), nullable=False)
     provider_name: Mapped[str] = mapped_column(String(50), nullable=False)  # openai, anthropic, google, etc.
     api_key: Mapped[str] = mapped_column(Text, nullable=False)
     base_url: Mapped[Optional[str]] = mapped_column(String(255))  # Custom endpoint URLs
@@ -93,6 +93,7 @@ class TenantAIProvider(Base):
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="ai_providers")
+    global_provider: Mapped["GlobalAIProvider"] = relationship("GlobalAIProvider")
     bots: Mapped[List["Bot"]] = relationship("Bot", back_populates="ai_provider")
 
     __table_args__ = (
@@ -127,9 +128,28 @@ class Bot(Base):
     ai_provider: Mapped[Optional["TenantAIProvider"]] = relationship("TenantAIProvider", back_populates="bots")
     scopes: Mapped[List["Scope"]] = relationship("Scope", back_populates="bot", cascade="all, delete-orphan")
     conversations: Mapped[List["Conversation"]] = relationship("Conversation", back_populates="bot", cascade="all, delete-orphan")
+    datasets: Mapped[List["Dataset"]] = relationship("Dataset", secondary="bot_datasets", back_populates="bots")
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_bot_tenant_name"),
+    )
+
+
+class BotDataset(Base):
+    """Bot-Dataset relationship model for knowledge base assignment."""
+    __tablename__ = "bot_datasets"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    bot_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("bots.id", ondelete="CASCADE"), nullable=False)
+    dataset_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    priority: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("bot_id", "dataset_id", name="uq_bot_dataset"),
+        Index("idx_bot_datasets_bot_id", "bot_id"),
+        Index("idx_bot_datasets_dataset_id", "dataset_id"),
     )
 
 
@@ -171,6 +191,7 @@ class Dataset(Base):
 
     # Relationships
     documents: Mapped[List["Document"]] = relationship("Document", back_populates="dataset", cascade="all, delete-orphan")
+    bots: Mapped[List["Bot"]] = relationship("Bot", secondary="bot_datasets", back_populates="datasets")
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_dataset_tenant_name"),

@@ -19,8 +19,8 @@ export default function NoSSR({ children, fallback = null }: NoSSRProps) {
   }, []);
 
   if (!mounted) {
-    return <>{fallback}</>;
+    return <div suppressHydrationWarning>{fallback}</div>;
   }
 
-  return <>{children}</>;
+  return <div suppressHydrationWarning>{children}</div>;
 }

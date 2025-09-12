@@ -16,8 +16,8 @@ export class AuthService {
     
     const { access_token, user } = response.data;
     
-    // Store tokens (no refresh_token from backend yet)
-    apiClient.setTokens(access_token, null);
+    // Store access token only (no refresh token from backend)
+    apiClient.setTokens(access_token);
     
     return response.data;
   }

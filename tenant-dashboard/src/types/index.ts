@@ -11,18 +11,79 @@ export interface TenantUser {
   created_at: string;
 }
 
+export interface TenantAIProvider {
+  id: string;
+  tenant_id: string;
+  global_ai_provider_id: string;
+  provider_name: string;
+  base_url?: string;
+  custom_settings?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlobalAIProvider {
+  id: string;
+  name: string;
+  provider_type: string;
+  config?: Record<string, any>;
+  is_configured: boolean;
+}
+
+export interface CreateTenantAIProviderRequest {
+  global_ai_provider_id: string;
+  provider_name: string;
+  api_key: string;
+  base_url?: string;
+  custom_settings?: Record<string, any>;
+  is_active?: boolean;
+}
+
+export interface UpdateTenantAIProviderRequest {
+  provider_name?: string;
+  api_key?: string;
+  base_url?: string;
+  custom_settings?: Record<string, any>;
+  is_active?: boolean;
+}
+
+export interface Scope {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description?: string;
+  config?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Bot {
   id: string;
   name: string;
   description?: string;
   tenant_id: string;
-  ai_provider_id: string;
+  tenant_ai_provider_id: string;
   ai_provider_name?: string;
   model: string;
   system_prompt?: string;
   temperature?: number;
   max_tokens?: number;
   is_active: boolean;
+  settings?: Record<string, any>;
+  is_public: boolean;
+  allowed_domains?: string[];
+  datasets?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+  }>;
+  scopes?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+  }>;
   created_at: string;
   updated_at: string;
 }
@@ -105,11 +166,15 @@ export interface LoginResponse {
 export interface CreateBotRequest {
   name: string;
   description?: string;
-  ai_provider_id: string;
+  tenant_ai_provider_id: string;
   model: string;
   system_prompt?: string;
   temperature?: number;
   max_tokens?: number;
+  settings?: Record<string, any>;
+  is_public?: boolean;
+  allowed_domains?: string[];
+  dataset_ids?: string[];
 }
 
 export interface UpdateBotRequest extends Partial<CreateBotRequest> {

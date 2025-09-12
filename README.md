@@ -122,10 +122,21 @@ npm run dev
 
 ## 📚 Documentation
 
-Detailed documentation is available in the `/docs` directory:
-- [API Documentation](./docs/API.md)
-- [Development Setup](./docs/DEVELOPMENT.md)
-- [Deployment Guide](./docs/DEPLOYMENT.md)
+Comprehensive documentation is available in the `/docs` directory:
+
+### 🗂️ Core Documentation
+- **[Database Schema](./docs/DATABASE_SCHEMA.md)** - Complete database structure, relationships, and data flow patterns
+- **[API Endpoints](./docs/API_ENDPOINTS.md)** - Full API reference with examples and integration patterns
+- **[Development Workflow](./docs/DEVELOPMENT_WORKFLOW.md)** - Development setup, testing, deployment, and maintenance
+
+### 📋 Reference Guides
+- [Dashboard Guide](./DASHBOARD_GUIDE.md) - Admin and tenant dashboard usage
+- [Folder Structure](./FOLDER_RENAME_SUMMARY.md) - Project organization overview
+
+### 🔍 Quick References
+- **Database Relationships**: Multi-tenant architecture with global AI providers → tenant AI providers → bots → conversations
+- **Current State**: 1 tenant configured, 2 AI providers (OpenAI, Anthropic), ready for bot creation
+- **Service Ports**: API (8000), Admin Dashboard (3000), Tenant Dashboard (3002)
 
 ## 🔐 Authentication
 

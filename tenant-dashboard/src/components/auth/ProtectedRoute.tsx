@@ -3,14 +3,15 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { CONFIG } from '@/config';
-import { CircularProgress, Box } from '@mui/material';
 import { useEffect } from 'react';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import NoSSR from '@/components/NoSSR';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+function ProtectedContent({ children }: ProtectedRouteProps) {
   const { isAuthenticated, loading, mounted } = useAuth();
   const router = useRouter();
 
@@ -23,16 +24,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Show loading until component is mounted and auth is determined
   if (!mounted || loading) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="100vh"
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingSpinner message="Checking authentication..." />;
   }
 
   if (!isAuthenticated) {
@@ -40,4 +32,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   return <>{children}</>;
+}
+
+export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+  return (
+    <NoSSR fallback={<LoadingSpinner message="Loading..." />}>
+      <div suppressHydrationWarning>
+        <ProtectedContent>{children}</ProtectedContent>
+      </div>
+    </NoSSR>
+  );
 }
