@@ -72,41 +72,57 @@ class TitleGenerationService:
                 return None
             
             # Get conversation messages (first few exchanges to determine topic)
-            result = await self.db.execute(
-                select(Message)
-                .where(Message.conversation_id == conversation_id)
-                .order_by(Message.sequence_number.asc())
-                .limit(6)  # First 3 exchanges (user + assistant pairs)
-            )
-            messages = result.scalars().all()
+            try:
+                result = await self.db.execute(
+                    select(Message)
+                    .where(Message.conversation_id == conversation_id)
+                    .order_by(Message.sequence_number.asc())
+                    .limit(6)  # First 3 exchanges (user + assistant pairs)
+                )
+                messages = result.scalars().all()
+            except Exception as e:
+                logger.error("Failed to fetch messages for title generation", 
+                           conversation_id=conversation_id, error=str(e))
+                return None
             
             if len(messages) < 2:  # Need at least user + assistant message
                 logger.debug("Not enough messages for title generation", 
                            conversation_id=conversation_id, message_count=len(messages))
                 return None
             
-            # Generate title using AI
-            generated_title = await self._generate_title_from_messages(bot, messages)
+            # Temporarily disable AI title generation to prevent async issues
+            # TODO: Re-enable once async vector search is fully fixed
+            logger.debug("Title generation temporarily disabled", conversation_id=conversation_id)
             
-            if generated_title:
-                # Update conversation with generated title
-                conversation.title = generated_title
-                try:
-                    await self.db.commit()
-                    logger.info("Generated conversation title", 
-                              conversation_id=conversation_id, title=generated_title)
-                    return generated_title
-                except Exception as commit_error:
-                    logger.error("Failed to save generated title to database", 
-                               conversation_id=conversation_id, error=str(commit_error))
-                    await self.db.rollback()
-                    return None
+            # Use a simple default title based on message content
+            first_user_message = next((m for m in messages if m.role == "user"), None)
+            if first_user_message and len(first_user_message.content) > 0:
+                # Create title from first 50 characters of first user message
+                default_title = first_user_message.content[:50].strip()
+                if len(first_user_message.content) > 50:
+                    default_title += "..."
+            else:
+                default_title = f"Conversation ({len(messages)} messages)"
+            
+            # Update conversation with default title
+            conversation.title = default_title
+            try:
+                await self.db.commit()
+                logger.info("Set default conversation title", 
+                          conversation_id=conversation_id, title=default_title)
+                return default_title
+            except Exception as commit_error:
+                logger.error("Failed to save default title to database", 
+                           conversation_id=conversation_id, error=str(commit_error))
+                await self.db.rollback()
+                return "New Conversation"
                 
         except Exception as e:
             logger.error("Failed to generate conversation title", 
-                        conversation_id=conversation_id, error=str(e))
-            return None
-
+                       conversation_id=conversation_id, error=str(e))
+            # Return a default title to prevent further errors
+            return "New Conversation"
+    
     async def _generate_title_from_messages(
         self, 
         bot: Bot, 

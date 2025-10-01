@@ -51,6 +51,32 @@ async def chat_public(
         )
         .where(Bot.id == request.bot_id, Bot.is_active == True)
     )
+    
+    # Auto-retrieve conversation context if session_id is provided
+    if request.session_id and len(request.messages) == 1:
+        # Widget is sending single message - retrieve conversation context
+        try:
+            context_messages = await _get_conversation_context(
+                session_id=request.session_id,
+                bot_id=request.bot_id,
+                limit=10,
+                db=db
+            )
+            # Combine context with new message
+            if context_messages:
+                request.messages = context_messages + request.messages
+                logger.info(
+                    "Retrieved conversation context for public chat",
+                    session_id=request.session_id,
+                    context_messages=len(context_messages),
+                    total_messages=len(request.messages)
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to retrieve conversation context, continuing with single message",
+                session_id=request.session_id,
+                error=str(e)
+            )
     bot = result.scalar_one_or_none()
     
     if not bot:
@@ -208,11 +234,22 @@ async def _chat_completion_public(
             None
         )
         if last_user_message:
+            logger.info("🛡️ GUARDRAIL CHECK", query=last_user_message.content[:50], bot_id=bot.id)
             is_allowed, refusal_message = await guardrail_service.validate_query(
                 bot, last_user_message.content
             )
+            logger.info("🛡️ GUARDRAIL RESULT", is_allowed=is_allowed, has_refusal=bool(refusal_message))
+            # Check if guardrails are being too restrictive
+            if not is_allowed and refusal_message:
+                # Log the specific issue for debugging
+                logger.warning("Query blocked by guardrails - investigating if legitimate", 
+                             query=last_user_message.content[:50], 
+                             bot_name=bot.name,
+                             refusal_preview=refusal_message[:100])
+            
             if not is_allowed:
                 # Return refusal message without processing
+                logger.info("🛡️ QUERY BLOCKED BY GUARDRAILS", query=last_user_message.content[:50])
                 return ChatResponse(
                     message=ChatMessage(role="assistant", content=refusal_message),
                     citations=[],
@@ -232,6 +269,13 @@ async def _chat_completion_public(
             None
         )
         if last_user_message:
+            logger.info("📚 CALLING RETRIEVAL SERVICE", 
+                       query=last_user_message.content[:50],
+                       bot_id=bot.id,
+                       tenant_id=bot.tenant_id,
+                       has_scopes=len(bot.scopes) if bot.scopes else 0,
+                       has_datasets=len(bot.datasets) if bot.datasets else 0)
+            
             citations = await retrieval_service.retrieve_context(
                 query=last_user_message.content,
                 tenant_id=bot.tenant_id,
@@ -239,6 +283,11 @@ async def _chat_completion_public(
                 bot_datasets=bot.datasets,
                 limit=5,
             )
+            
+            logger.info("📚 RETRIEVAL RESULT", 
+                       query=last_user_message.content[:50],
+                       citations_found=len(citations),
+                       bot_id=bot.id)
         else:
             citations = []
     else:
@@ -573,6 +622,13 @@ async def _get_conversation_context(
         return []  # New conversation, no context
     
     try:
+        # Validate session_id is a proper UUID
+        try:
+            uuid.UUID(session_id)
+        except ValueError:
+            logger.warning("Invalid session ID format", session_id=session_id)
+            return []  # Invalid session ID format
+            
         # Get recent messages from database
         result = await db.execute(
             select(Message)

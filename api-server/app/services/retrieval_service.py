@@ -35,6 +35,11 @@ class RetrievalService:
         limit: int = 5,
     ) -> List[Citation]:
         """Retrieve relevant context for a query using bot's assigned datasets."""
+        logger.info("🔍 RETRIEVAL SERVICE CALLED", 
+                   query=query[:50], 
+                   tenant_id=tenant_id, 
+                   has_datasets=bool(bot_datasets),
+                   has_scopes=bool(bot_scopes))
         try:
             # Generate query embedding
             query_embedding = await self._generate_embedding(query)
@@ -104,13 +109,68 @@ class RetrievalService:
                     tenant_id=tenant_id,
                 )
             
-            # Add vector similarity search using L2 distance
-            chunk_query = chunk_query.order_by(Chunk.embedding.l2_distance(query_embedding))
-            chunk_query = chunk_query.limit(limit)
+            # Use simple keyword matching to avoid async issues
+            logger.info("Using keyword search for retrieval", query=query[:50])
             
-            # Execute query
-            result = await self.db.execute(chunk_query)
-            chunks = result.scalars().all()
+            # Simple approach: search for any chunks containing query keywords
+            query_lower = query.lower().strip()
+            
+            # Build a simple text search that should work reliably
+            try:
+                # Create a basic query that searches chunk content
+                basic_query = (
+                    select(Chunk)
+                    .join(Document)
+                    .join(Dataset)
+                    .options(selectinload(Chunk.document))
+                    .where(
+                        Dataset.tenant_id == tenant_id,
+                        Dataset.is_active == True,
+                        Document.status == "completed",
+                        or_(
+                            Chunk.content.ilike(f"%{query_lower}%"),
+                            Chunk.content.ilike(f"%{query_lower.split()[0]}%") if query_lower.split() else False
+                        )
+                    )
+                    .limit(limit)
+                )
+                
+                # If we have bot datasets, filter by them
+                if bot_datasets:
+                    dataset_ids = [str(dataset.id) for dataset in bot_datasets]
+                    basic_query = basic_query.where(Dataset.id.in_(dataset_ids))
+                    logger.info(f"Filtering by bot datasets", dataset_count=len(dataset_ids))
+                
+                result = await self.db.execute(basic_query)
+                chunks = result.scalars().all()
+                logger.info(f"Keyword search found {len(chunks)} chunks", query=query[:30])
+                
+            except Exception as e:
+                logger.error("Keyword search failed, trying fallback", error=str(e))
+                # Ultimate fallback - just get any chunks from bot datasets
+                try:
+                    if bot_datasets:
+                        dataset_ids = [str(dataset.id) for dataset in bot_datasets]
+                        fallback_query = (
+                            select(Chunk)
+                            .join(Document)
+                            .join(Dataset)
+                            .options(selectinload(Chunk.document))
+                            .where(
+                                Dataset.id.in_(dataset_ids),
+                                Dataset.is_active == True,
+                                Document.status == "completed"
+                            )
+                            .limit(3)
+                        )
+                        result = await self.db.execute(fallback_query)
+                        chunks = result.scalars().all()
+                        logger.info(f"Fallback search found {len(chunks)} chunks")
+                    else:
+                        chunks = []
+                except Exception as fallback_error:
+                    logger.error("All retrieval methods failed", error=str(fallback_error))
+                    return []
             
             # Convert to citations with actual similarity scores
             citations = []

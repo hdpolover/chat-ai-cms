@@ -128,6 +128,13 @@ class GuardrailService:
             # Domain-specific indicators
             strength = max(strength, self._get_domain_specific_strength(content_lower, topics))
             
+            # Support-specific intelligence for common support queries
+            if any(support_term in topics for support_term in ['support', 'help', 'account', 'login', 'technical']):
+                support_indicators = ['password', 'reset', 'login', 'account', 'profile', 'username', 
+                                    'recover', 'access', 'issue', 'problem', 'help', 'support']
+                if any(indicator in content_lower for indicator in support_indicators):
+                    strength = max(strength, 0.8)  # High strength for support queries
+            
             max_strength = max(max_strength, strength)
         
         return min(max_strength, 1.0)

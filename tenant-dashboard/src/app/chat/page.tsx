@@ -41,8 +41,10 @@ import { apiClient } from '@/services/api';
 
 interface Message {
   id: string;
+  conversation_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  sequence_number: number;
   created_at: string;
   citations?: Citation[];
   token_usage?: {
@@ -70,16 +72,24 @@ interface Conversation {
   id: string;
   bot_id: string;
   title?: string;
-  messages: Message[];
+  session_id?: string;
+  is_active: boolean;
+  message_count: number;
+  last_message?: string;
   created_at: string;
   updated_at: string;
 }
 
 interface ChatResponse {
+  // For new conversations: {conversation_id, message: {...}}
   conversation_id?: string;
   message?: {
     id: string;
+    conversation_id: string;
+    role: string;
     content: string;
+    sequence_number: number;
+    created_at: string;
     citations?: Citation[];
     token_usage?: {
       prompt_tokens?: number;
@@ -87,8 +97,22 @@ interface ChatResponse {
       total_tokens?: number;
     };
   };
-  response?: string;
+  
+  // For follow-up messages: message fields directly in response
+  id?: string;
+  role?: string;
+  content?: string;
+  sequence_number?: number;
+  created_at?: string;
   citations?: Citation[];
+  token_usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  
+  // Legacy fields
+  response?: string;
   metadata?: {
     token_usage?: {
       prompt_tokens?: number;
@@ -163,17 +187,33 @@ export default function ChatPage() {
       );
       setConversations(conversationsData);
       
-      // Auto-select most recent conversation or create new one
-      if (conversationsData.length > 0) {
-        setCurrentConversation(conversationsData[0]);
-        setMessages(conversationsData[0].messages || []);
-      } else {
+      // Only auto-select if no current conversation exists
+      if (!currentConversation && conversationsData.length > 0) {
+        const firstConversation = conversationsData[0];
+        setCurrentConversation(firstConversation);
+        // Load messages for the selected conversation
+        loadConversationMessages(firstConversation.id);
+      } else if (conversationsData.length === 0 && !currentConversation) {
         startNewConversation();
       }
     } catch (err) {
       console.error('Error loading conversations:', err);
       // If conversations don't exist, start a new one
-      startNewConversation();
+      if (!currentConversation) {
+        startNewConversation();
+      }
+    }
+  };
+
+  const loadConversationMessages = async (conversationId: string) => {
+    try {
+      const messagesData = await apiClient.get<Message[]>(
+        `/v1/tenant/conversations/${conversationId}/messages`
+      );
+      setMessages(messagesData);
+    } catch (err) {
+      console.error('Error loading conversation messages:', err);
+      setMessages([]);
     }
   };
 
@@ -188,8 +228,10 @@ export default function ChatPage() {
 
     const userMessage: Message = {
       id: Date.now().toString(),
+      conversation_id: currentConversation?.id || '',
       role: 'user',
       content: newMessage.trim(),
+      sequence_number: messages.length + 1,
       created_at: new Date().toISOString(),
     };
 
@@ -223,33 +265,83 @@ export default function ChatPage() {
         
         // Update conversation ID for future messages
         if (response.conversation_id) {
-          setCurrentConversation({
+          const newConversation: Conversation = {
             id: response.conversation_id,
             bot_id: selectedBot.id,
             title: `Chat with ${selectedBot.name}`,
-            messages: [],
+            session_id: response.conversation_id,
+            is_active: true,
+            message_count: 2, // User message + bot response
+            last_message: response.message?.content || response.response || 'New conversation',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          });
+          };
+          setCurrentConversation(newConversation);
+          
+          // Update conversations list with new conversation
+          setConversations(prev => [newConversation, ...prev]);
         }
       }
 
-      // Add bot response to messages
-      if (response.message || response.response) {
-        const botMessage: Message = {
-          id: Date.now().toString() + '_bot',
+      // Add bot response to messages - handle different response formats
+      let botMessage: Message | null = null;
+      
+      if (response.message) {
+        // New conversation format: {conversation_id, message: {...}}
+        const msg = response.message;
+        botMessage = {
+          id: msg.id,
+          conversation_id: msg.conversation_id,
           role: 'assistant',
-          content: response.message?.content || response.response || 'No response received',
-          created_at: new Date().toISOString(),
-          citations: response.message?.citations || response.citations || [],
-          token_usage: response.message?.token_usage || response.metadata?.token_usage,
+          content: msg.content,
+          sequence_number: msg.sequence_number,
+          created_at: msg.created_at,
+          citations: msg.citations || [],
+          token_usage: msg.token_usage,
         };
-
-        setMessages(prev => [...prev, botMessage]);
+      } else if (response.id && response.content) {
+        // Follow-up message format: message fields directly in response
+        botMessage = {
+          id: response.id,
+          conversation_id: response.conversation_id || currentConversation?.id || '',
+          role: 'assistant',
+          content: response.content,
+          sequence_number: response.sequence_number || messages.length + 2,
+          created_at: response.created_at || new Date().toISOString(),
+          citations: response.citations || [],
+          token_usage: response.token_usage,
+        };
+      } else if (response.response) {
+        // Legacy format fallback
+        botMessage = {
+          id: Date.now().toString() + '_bot',
+          conversation_id: response.conversation_id || currentConversation?.id || '',
+          role: 'assistant',
+          content: response.response,
+          sequence_number: messages.length + 2,
+          created_at: new Date().toISOString(),
+          citations: response.citations || [],
+          token_usage: response.metadata?.token_usage,
+        };
+      }
+      
+      if (botMessage) {
+        setMessages(prev => [...prev, botMessage!]);
+        
+        // Update current conversation's message count and last message
+        if (currentConversation) {
+          setCurrentConversation(prev => prev ? {
+            ...prev,
+            message_count: prev.message_count + 2,
+            last_message: botMessage!.content.slice(0, 100),
+            updated_at: new Date().toISOString()
+          } : null);
+        }
       }
 
-      // Refresh conversations list
-      if (selectedBot) {
+      // Update conversations list without resetting current conversation
+      if (selectedBot && !currentConversation) {
+        // Only reload if we don't have a current conversation
         loadBotConversations();
       }
 
@@ -326,6 +418,37 @@ export default function ChatPage() {
               </Select>
             </FormControl>
 
+            {/* Conversation Selector */}
+            {conversations.length > 0 && (
+              <FormControl sx={{ minWidth: 250 }}>
+                <InputLabel>Select Conversation</InputLabel>
+                <Select
+                  value={currentConversation?.id || ''}
+                  onChange={(e) => {
+                    const conversation = conversations.find(c => c.id === e.target.value);
+                    if (conversation) {
+                      setCurrentConversation(conversation);
+                      loadConversationMessages(conversation.id);
+                    }
+                  }}
+                  label="Select Conversation"
+                >
+                  {conversations.map(conv => (
+                    <MenuItem key={conv.id} value={conv.id}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" noWrap>
+                          {conv.title || `Conversation ${conv.id.slice(0, 8)}...`}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {new Date(conv.updated_at).toLocaleDateString()}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
             <Button
               variant="outlined"
               startIcon={<Clear />}
@@ -338,7 +461,17 @@ export default function ChatPage() {
             <Button
               variant="outlined"
               startIcon={<Refresh />}
-              onClick={() => selectedBot && loadBotConversations()}
+              onClick={() => {
+                if (selectedBot) {
+                  if (currentConversation) {
+                    // Reload messages for current conversation
+                    loadConversationMessages(currentConversation.id);
+                  } else {
+                    // Load conversations if no current conversation
+                    loadBotConversations();
+                  }
+                }
+              }}
               disabled={!selectedBot}
             >
               Refresh
