@@ -15,6 +15,7 @@ from ...db import get_sync_db
 from ...models import Tenant, Dataset, Document, Chunk
 from ...schemas import DocumentCreate, DocumentUpdate, DocumentResponse
 from ...services.job_queue_service import job_queue_service
+from ...services.file_extraction_service import file_extraction_service
 from .auth import get_current_tenant
 
 router = APIRouter(prefix="/v1/tenant", tags=["Tenant - Documents"])
@@ -25,42 +26,37 @@ def generate_content_hash(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
 
-def extract_text_from_file(file_content: bytes, filename: str) -> str:
-    """Extract text content from uploaded file."""
-    # Get file extension
-    _, ext = os.path.splitext(filename.lower())
+def extract_text_from_file(file_content: bytes, filename: str) -> tuple[str, dict, Optional[str]]:
+    """Extract text content from uploaded file using the file extraction service.
     
-    if ext in ['.txt', '.md', '.py', '.js', '.json', '.csv', '.log']:
-        # Plain text files
-        try:
-            return file_content.decode('utf-8')
-        except UnicodeDecodeError:
-            try:
-                return file_content.decode('latin-1')
-            except UnicodeDecodeError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Cannot decode text from file {filename}"
-                )
-    
-    elif ext == '.pdf':
-        # TODO: Implement PDF extraction using PyPDF2 or similar
+    Returns:
+        tuple: (content, metadata, error_message)
+    """
+    try:
+        # Validate file size (50MB limit)
+        if not file_extraction_service.validate_file_size(len(file_content)):
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File size exceeds 50MB limit"
+            )
+        
+        # Extract content using the file extraction service
+        result = file_extraction_service.extract_text_from_file(file_content, filename)
+        
+        if result.get('error'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result['error']
+            )
+        
+        return result['content'], result['metadata'], None
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="PDF extraction not yet implemented. Please upload as text for now."
-        )
-    
-    elif ext in ['.doc', '.docx']:
-        # TODO: Implement Word document extraction using python-docx
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Word document extraction not yet implemented. Please upload as text for now."
-        )
-    
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file type: {ext}. Supported types: .txt, .md, .py, .js, .json, .csv, .log"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing file {filename}: {str(e)}"
         )
 
 
@@ -296,7 +292,12 @@ async def upload_document_file(
     
     # Extract text from file
     try:
-        content = extract_text_from_file(file_content, file.filename)
+        content, extraction_metadata, error_msg = extract_text_from_file(file_content, file.filename)
+        if error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -337,12 +338,18 @@ async def upload_document_file(
                 detail="Invalid JSON metadata"
             )
     
-    # Add file info to metadata
+    # Add file info and extraction metadata
     document_metadata.update({
         "original_filename": file.filename,
         "file_type": file.content_type,
         "upload_size": len(file_content)
     })
+    
+    # Add extraction metadata if available
+    if extraction_metadata:
+        document_metadata.update({
+            "extraction": extraction_metadata
+        })
     
     # Create upload directory if it doesn't exist
     upload_dir = "/app/uploads"
@@ -684,11 +691,85 @@ async def reprocess_document(
     
     db.commit()
     
-    # TODO: Trigger document processing service
-    # This will be implemented in the next todo item
+    # Enqueue document processing in background
+    try:
+        job_id = job_queue_service.enqueue_document_processing(str(document.id))
+        print(f"Document reprocessing job enqueued: {job_id}")  # Temporary logging
+    except Exception as e:
+        print(f"Failed to enqueue reprocessing job: {e}")  # Temporary logging
+        # Don't fail the reprocessing if job queueing fails
     
     return {
         "message": "Document queued for reprocessing",
         "document_id": str(document_id),
         "status": "pending"
     }
+
+
+@router.get("/supported-formats")
+async def get_supported_formats(
+    current_tenant: Tenant = Depends(get_current_tenant),
+):
+    """Get list of supported file formats for upload."""
+    formats = file_extraction_service.get_supported_formats()
+    
+    return {
+        "supported_formats": formats,
+        "max_file_size_mb": 50,
+        "notes": {
+            "pdf": "Text extraction only - images and complex layouts may not be preserved",
+            "excel": "All sheets will be processed - large files may take longer",
+            "word": "Only .docx format supported - .doc files must be converted",
+            "csv": "Automatic delimiter detection - complex CSV files may need preprocessing"
+        }
+    }
+
+
+@router.post("/validate-file")
+async def validate_file_upload(
+    file: UploadFile = File(...),
+    current_tenant: Tenant = Depends(get_current_tenant),
+):
+    """Validate a file before upload without actually processing it."""
+    
+    # Read file content for validation
+    file_content = await file.read()
+    
+    # Reset file pointer for potential future use
+    await file.seek(0)
+    
+    # Get file info
+    file_info = file_extraction_service.get_file_info(file_content, file.filename)
+    
+    # Validate file size
+    is_size_valid = file_extraction_service.validate_file_size(len(file_content))
+    
+    result = {
+        **file_info,
+        "is_size_valid": is_size_valid,
+        "validation_status": "valid" if file_info["is_supported"] and is_size_valid else "invalid",
+        "issues": []
+    }
+    
+    # Add validation issues
+    if not file_info["is_supported"]:
+        result["issues"].append(f"File type {file_info['extension']} is not supported")
+    
+    if not is_size_valid:
+        result["issues"].append(f"File size {file_info['size_mb']}MB exceeds 50MB limit")
+    
+    # Try a quick content preview if supported
+    if file_info["is_supported"] and is_size_valid:
+        try:
+            extraction_result = file_extraction_service.extract_text_from_file(file_content, file.filename)
+            if extraction_result.get('error'):
+                result["issues"].append(f"Content extraction issue: {extraction_result['error']}")
+                result["validation_status"] = "warning"
+            else:
+                result["content_preview"] = extraction_result['content'][:500] + "..." if len(extraction_result['content']) > 500 else extraction_result['content']
+                result["extraction_metadata"] = extraction_result['metadata']
+        except Exception as e:
+            result["issues"].append(f"Content validation failed: {str(e)}")
+            result["validation_status"] = "warning"
+    
+    return result
