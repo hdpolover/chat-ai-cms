@@ -38,6 +38,7 @@ import {
   Analytics,
   Api,
   Folder,
+  QuestionAnswer,
 } from '@mui/icons-material';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -50,10 +51,11 @@ interface TenantLayoutProps {
 
 const navigationItems = [
   { title: 'Dashboard', icon: Dashboard, path: '/dashboard' },
+  { title: 'Live Chat', icon: Chat, path: '/chat' },
   { title: 'Datasets', icon: Folder, path: '/datasets' },
   { title: 'Documents', icon: InsertDriveFile, path: '/documents' },
   { title: 'Bots', icon: SmartToy, path: '/bots' },
-  { title: 'Conversations', icon: Chat, path: '/conversations' },
+  { title: 'Conversations', icon: QuestionAnswer, path: '/conversations' },
   { title: 'Analytics', icon: Analytics, path: '/analytics' },
 ];
 

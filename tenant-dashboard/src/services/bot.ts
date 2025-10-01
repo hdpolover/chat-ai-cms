@@ -5,6 +5,7 @@ import {
   CreateBotRequest,
   UpdateBotRequest,
   TenantAIProvider,
+  ChatSession,
 } from '@/types';
 
 export class BotService {
@@ -132,7 +133,7 @@ export class BotService {
     }
   }
 
-  // Get bot scopes
+    // Get bot scopes
   static async getBotScopes(botId: string): Promise<Array<{
     id: string;
     name: string;
@@ -145,17 +146,45 @@ export class BotService {
         id: string;
         name: string;
         description?: string;
-        config?: Record<string, any>;
+        guardrails?: Record<string, any>;
         is_active: boolean;
-      }>>(`${CONFIG.API.TENANT_BOTS}/${botId}/scopes`);
-      return response || [];
+      }>>(`/v1/tenant/bots/${botId}/scopes`);
+      
+      // Transform guardrails to config for compatibility
+      return response.map(scope => ({
+        ...scope,
+        config: scope.guardrails || {}
+      }));
     } catch (error) {
-      console.error(`Failed to fetch bot scopes for ${botId}:`, error);
-      throw error;
+      console.error('Failed to get bot scopes:', error);
+      return [];
     }
   }
 
-  // Get available global providers
+  /**
+   * Get conversations for a specific bot
+   */
+  static async getBotConversations(botId: string): Promise<ChatSession[]> {
+    try {
+      const response = await apiClient.get<any[]>(`/v1/tenant/bots/${botId}/conversations`);
+      return response.map(conv => ({
+        id: conv.id,
+        bot_id: conv.bot_id,
+        bot_name: conv.bot_name,
+        user_id: conv.user_id,
+        session_id: conv.session_id || conv.id,
+        title: conv.title,
+        message_count: conv.message_count || 0,
+        created_at: conv.created_at,
+        updated_at: conv.updated_at
+      }));
+    } catch (error) {
+      console.error('Failed to fetch bot conversations:', error);
+      return [];
+    }
+  }
+
+  // Get available global AI providers (public ones that can be configured)
   static async getAvailableGlobalProviders(): Promise<Array<{
     id: string;
     name: string;

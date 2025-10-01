@@ -6,6 +6,7 @@ export { DocumentService } from './document';
 export { AnalyticsService } from './analytics';
 export { DatasetService } from './dataset';
 export { conversationService } from './conversation';
+export { ScopeService } from './scope';
 
 // Re-export types from services
 export type {

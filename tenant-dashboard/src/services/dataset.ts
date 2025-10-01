@@ -2,14 +2,18 @@ import { apiClient } from './api';
 
 export interface Dataset {
   id: string;
+  tenant_id: string;
   name: string;
   description?: string;
   tags: string[];
+  metadata: any;
+  is_active: boolean;
   created_at: string;
-  updated_at?: string;
-  is_active?: boolean;
-  document_count?: number;
-  total_chunks?: number;
+  updated_at: string;
+  document_count: number;
+  chunk_count: number;
+  completed_documents: number;
+  processing_complete: boolean;
 }
 
 export interface CreateDatasetRequest {

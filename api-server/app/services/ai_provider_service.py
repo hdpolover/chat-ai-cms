@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import TenantAIProvider, Bot
 from ..schemas import ChatMessage, TokenUsage
+from .guardrail_service import GuardrailService
 
 logger = structlog.get_logger()
 
@@ -200,11 +201,17 @@ class AIProviderService:
         self, bot: Bot, context_citations: List = None
     ) -> str:
         """Build system prompt with context and bot configuration."""
+        guardrail_service = GuardrailService(self.db)
         parts = []
 
         # Add bot's system prompt
         if bot.system_prompt:
             parts.append(bot.system_prompt)
+
+        # Add guardrail restrictions (knowledge boundaries and scope restrictions)
+        scope_restrictions = guardrail_service.build_knowledge_restriction_prompt(bot)
+        if scope_restrictions:
+            parts.append(scope_restrictions)
 
         # Add context from citations
         if context_citations:
@@ -218,11 +225,112 @@ class AIProviderService:
                 context_parts.append(citation.content)
                 context_parts.append("")
 
-            context_parts.append(
-                "Please use this context to provide accurate and helpful responses. "
-                "Always cite your sources when using information from the context."
-            )
+            # Check if bot should use context-only mode
+            if guardrail_service.should_use_context_only(bot):
+                context_parts.append(
+                    "IMPORTANT: Base your answer ONLY on the information provided above. "
+                    "If the context doesn't contain enough information to answer the question, "
+                    "say so explicitly. Do not use your general knowledge."
+                )
+            else:
+                context_parts.append(
+                    "Please use this context to provide accurate and helpful responses. "
+                    "Always cite your sources when using information from the context."
+                )
 
             parts.append("\n".join(context_parts))
 
         return "\n\n".join(parts) if parts else ""
+
+    async def generate_conversation_title(
+        self,
+        bot: Bot,
+        conversation_text: str,
+        metadata: dict = None,
+    ) -> Optional[str]:
+        """
+        Generate a concise conversation title using the bot's AI provider.
+        
+        Args:
+            bot: The bot instance with AI provider configured
+            conversation_text: The conversation content to generate title from
+            metadata: Optional metadata for the request
+            
+        Returns:
+            Generated title string or None if generation failed
+        """
+        if not bot.ai_provider:
+            raise ValueError(f"Bot {bot.id} has no AI provider configured")
+
+        try:
+            title_prompt = """You are a helpful assistant that generates concise, descriptive titles for conversations.
+
+Your task is to analyze the conversation and create a short, meaningful title that captures the main topic or question being discussed.
+
+Guidelines:
+- Keep titles between 3-8 words
+- Make titles descriptive and specific
+- Avoid generic titles like "Chat" or "Conversation"
+- Focus on the main topic, question, or problem being discussed
+- Use title case (capitalize important words)
+- Don't use quotes around the title
+- If it's a question, you can include "About" or similar prepositions
+
+Examples:
+- "Python List Comprehension Help"
+- "Database Query Optimization Tips"  
+- "React Component State Management"
+- "Travel Recommendations for Tokyo"
+- "Recipe for Chocolate Cake"
+- "Investment Portfolio Advice"
+
+Respond with ONLY the title, nothing else."""
+
+            # Prepare messages for title generation
+            messages = [
+                ChatMessage(role="system", content=title_prompt),
+                ChatMessage(role="user", content=f"Conversation to summarize:\n\n{conversation_text}")
+            ]
+            
+            # Generate title using existing response generation
+            response_message, _ = await self.generate_response(
+                bot=bot,
+                messages=messages,
+                context_citations=None,
+                metadata={**(metadata or {}), "task": "title_generation"}
+            )
+            
+            # Clean the generated title
+            title = response_message.content.strip()
+            
+            # Remove quotes if present
+            if (title.startswith('"') and title.endswith('"')) or (title.startswith("'") and title.endswith("'")):
+                title = title[1:-1]
+            
+            # Remove common prefixes
+            prefixes_to_remove = [
+                "Title: ", "TITLE: ", "title: ",
+                "Generated title: ", "Conversation title: ",
+                "Chat title: ", "Topic: ", "TOPIC: "
+            ]
+            
+            for prefix in prefixes_to_remove:
+                if title.startswith(prefix):
+                    title = title[len(prefix):].strip()
+                    break
+            
+            # Validate title
+            if len(title) < 3 or len(title) > 100:
+                logger.warning("Generated title length invalid", title=title, length=len(title))
+                return None
+            
+            logger.info("Generated conversation title", bot_id=bot.id, title=title)
+            return title
+            
+        except Exception as e:
+            logger.error(
+                "Failed to generate conversation title",
+                error=str(e),
+                bot_id=bot.id,
+            )
+            return None

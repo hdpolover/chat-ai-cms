@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
@@ -13,7 +13,6 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
-  Grid,
   Divider,
   List,
   ListItem,
@@ -27,20 +26,10 @@ import {
   TableHead,
   TableRow,
   Avatar,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Switch,
-  FormControlLabel,
-  Slider,
-  OutlinedInput,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -63,8 +52,18 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import TenantLayout from '@/components/layout/TenantLayout';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { BotService } from '@/services/bot';
-import { DatasetService, Dataset } from '@/services/dataset';
-import { Bot, TenantAIProvider, ChatSession, UpdateBotRequest } from '@/types';
+import { Bot, TenantAIProvider, ChatSession, GuardrailConfig } from '@/types';
+
+// Type for scopes as they appear in bot response (without bot_id since it's nested)
+type BotScope = {
+  id: string;
+  name: string;
+  description?: string;
+  guardrails?: GuardrailConfig;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
 
 export default function BotDetailsPage() {
   const params = useParams();
@@ -72,8 +71,8 @@ export default function BotDetailsPage() {
   const botId = params.id as string;
 
   const [bot, setBot] = useState<Bot | null>(null);
+  const [scopes, setScopes] = useState<BotScope[]>([]);
   const [aiProviders, setAiProviders] = useState<TenantAIProvider[]>([]);
-  const [availableDatasets, setAvailableDatasets] = useState<Dataset[]>([]);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -81,40 +80,59 @@ export default function BotDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const loadBotDetails = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Loading bot details for ID:', botId);
+      
+      // Load core bot data first
+      const [botData, providersData] = await Promise.all([
+        BotService.getBot(botId),
+        BotService.getTenantAIProviders()
+      ]);
+      
+      if (!botData) {
+        throw new Error('Bot not found or you do not have permission to access it');
+      }
+      
+      setBot(botData);
+      setAiProviders(providersData || []);
+      
+      // Use scopes from bot data instead of separate API call
+      setScopes(botData.scopes || []);
+      
+      // Load chat sessions for this bot
+      try {
+        const conversations = await BotService.getBotConversations(botId);
+        setChatSessions(conversations);
+        console.log(`Loaded ${conversations.length} conversations for bot`);
+      } catch (error) {
+        console.error('Failed to load bot conversations:', error);
+        setChatSessions([]);
+      }
+      
+      console.log('Bot details loaded successfully:', {
+        bot: botData.name,
+        providers: providersData?.length || 0,
+        scopes: botData.scopes?.length || 0,
+        datasets: botData.datasets?.length || 0
+      });
+      
+    } catch (error) {
+      console.error('Failed to load bot details:', error);
+      setError(`Failed to load bot details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [botId]);
+
   useEffect(() => {
     if (botId) {
       loadBotDetails();
     }
-  }, [botId]);
-
-  const loadBotDetails = async () => {
-    try {
-      setLoading(true);
-      const [botData, providersData, datasetsData] = await Promise.all([
-        BotService.getBot(botId),
-        BotService.getTenantAIProviders(),
-        DatasetService.getAvailableDatasets()
-      ]);
-      
-      setBot(botData);
-      setAiProviders(providersData);
-      setAvailableDatasets(datasetsData);
-      
-      // Load chat sessions for this bot
-      try {
-        // Note: Chat sessions API endpoint may need to be implemented
-        // For now, we'll set empty array
-        setChatSessions([]);
-      } catch (error) {
-        console.error('Failed to load chat sessions:', error);
-      }
-    } catch (error) {
-      console.error('Failed to load bot details:', error);
-      setError('Failed to load bot details');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [botId, loadBotDetails]);
 
   const handleDeleteBot = async () => {
     if (!bot) return;
@@ -151,11 +169,7 @@ export default function BotDetailsPage() {
     return provider?.provider_name || 'Unknown';
   };
 
-  const getAvailableModels = (providerId: string) => {
-    const provider = aiProviders.find(p => p.id === providerId);
-    if (!provider?.custom_settings?.supported_models) return [];
-    return provider.custom_settings.supported_models;
-  };
+
 
   if (loading) {
     return (
@@ -174,7 +188,7 @@ export default function BotDetailsPage() {
               Bot Not Found
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              The bot you're looking for doesn't exist or you don't have permission to view it.
+              The bot you&apos;re looking for doesn&apos;t exist or you don&apos;t have permission to view it.
             </Typography>
             <Button variant="contained" onClick={() => router.push('/bots')}>
               Back to Bots
@@ -268,7 +282,7 @@ export default function BotDetailsPage() {
                       AI Provider
                     </Typography>
                     <Typography variant="body1">
-                      {getProviderName(bot.tenant_ai_provider_id)}
+                      {bot.ai_provider_name || getProviderName(bot.tenant_ai_provider_id) || 'Unknown Provider'}
                     </Typography>
                   </Box>
                   
@@ -454,6 +468,64 @@ export default function BotDetailsPage() {
           </Box>
         )}
 
+        {/* Bot Scopes & Restrictions */}
+        <Box sx={{ mt: 3 }}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+                <Settings sx={{ mr: 1 }} />
+                Bot Scopes & Restrictions ({scopes.length})
+              </Typography>
+              
+              {scopes.length > 0 ? (
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {scopes.map((scope) => (
+                        <TableRow key={scope.id}>
+                          <TableCell>
+                            <Typography variant="subtitle2">
+                              {scope.name}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {scope.description || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={scope.is_active ? 'Active' : 'Inactive'} 
+                              color={scope.is_active ? 'success' : 'default'}
+                              size="small" 
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    No scopes configured for this bot.
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Scopes help restrict what topics and knowledge sources the bot can access.
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Box>
+
         {/* Recent Chat Sessions */}
         {chatSessions.length > 0 && (
           <Box sx={{ mt: 3 }}>
@@ -520,7 +592,7 @@ export default function BotDetailsPage() {
           <DialogTitle>Delete Bot</DialogTitle>
           <DialogContent>
             <Typography>
-              Are you sure you want to delete "{bot.name}"? This action cannot be undone and will also delete all associated chat sessions and messages.
+              Are you sure you want to delete &quot;{bot.name}&quot;? This action cannot be undone and will also delete all associated chat sessions and messages.
             </Typography>
           </DialogContent>
           <DialogActions>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chat Widget Test</title>
+</head>
+<body>
+    <h1>Simple Chat Widget Test</h1>
+    <div id="test-results"></div>
+    <button id="test-btn">Test Chat API</button>
+
+    <script>
+        document.getElementById('test-btn').addEventListener('click', async function() {
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '<p>Testing...</p>';
+
+            try {
+                console.log('Testing chat API...');
+                
+                const response = await fetch('http://localhost:8000/v1/chat/public', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        bot_id: 'd23ebf61-221a-4da8-b441-c3db418848ed',
+                        messages: [{ role: 'user', content: 'Hello, this is a test!' }],
+                        metadata: { source: 'test' }
+                    })
+                });
+
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                resultsDiv.innerHTML = `
+                    <h3>✅ Success!</h3>
+                    <p><strong>Status:</strong> ${response.status}</p>
+                    <p><strong>Bot Response:</strong> ${data.message ? data.message.content : data.response || 'No response'}</p>
+                    <p><strong>Session ID:</strong> ${data.session_id}</p>
+                    <p><strong>Citations:</strong> ${data.citations ? data.citations.length : 0}</p>
+                    <details>
+                        <summary>Full Response</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                `;
+
+            } catch (error) {
+                console.error('Error:', error);
+                resultsDiv.innerHTML = `
+                    <h3>❌ Error!</h3>
+                    <p><strong>Message:</strong> ${error.message}</p>
+                    <p><strong>Check console for more details</strong></p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

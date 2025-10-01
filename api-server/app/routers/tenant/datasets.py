@@ -16,7 +16,7 @@ from .auth import get_current_tenant
 router = APIRouter(prefix="/v1/tenant/datasets", tags=["Tenant - Datasets"])
 
 
-@router.get("/", response_model=List[DatasetResponse])
+@router.get("/")
 async def list_datasets(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -47,20 +47,34 @@ async def list_datasets(
     
     datasets = query.offset(skip).limit(limit).all()
     
-    return [
-        DatasetResponse(
-            id=str(dataset.id),
-            tenant_id=str(dataset.tenant_id),
-            name=dataset.name,
-            description=dataset.description,
-            tags=dataset.tags,
-            metadata=dataset.meta_data,
-            is_active=dataset.is_active,
-            created_at=dataset.created_at,
-            updated_at=dataset.updated_at
-        )
-        for dataset in datasets
-    ]
+    # Enhanced response with statistics
+    result = []
+    for dataset in datasets:
+        # Get basic statistics for list view
+        document_count = db.query(Document).filter(Document.dataset_id == dataset.id).count()
+        chunk_count = db.query(Chunk).join(Document).filter(Document.dataset_id == dataset.id).count()
+        completed_documents = db.query(Document).filter(
+            Document.dataset_id == dataset.id,
+            Document.status == "completed"
+        ).count()
+        
+        result.append({
+            "id": str(dataset.id),
+            "tenant_id": str(dataset.tenant_id),
+            "name": dataset.name,
+            "description": dataset.description,
+            "tags": dataset.tags or [],
+            "metadata": dataset.meta_data or {},
+            "is_active": dataset.is_active,
+            "created_at": dataset.created_at,
+            "updated_at": dataset.updated_at,
+            "document_count": document_count,
+            "chunk_count": chunk_count,
+            "completed_documents": completed_documents,
+            "processing_complete": completed_documents == document_count and document_count > 0
+        })
+    
+    return result
 
 
 @router.post("/", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
@@ -112,13 +126,13 @@ async def create_dataset(
     )
 
 
-@router.get("/{dataset_id}", response_model=DatasetResponse)
+@router.get("/{dataset_id}")
 async def get_dataset(
     dataset_id: UUID,
     db: Session = Depends(get_sync_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
-    """Get a specific dataset by ID."""
+    """Get comprehensive dataset details with all related data."""
     
     dataset = db.query(Dataset).filter(
         Dataset.id == dataset_id,
@@ -131,17 +145,114 @@ async def get_dataset(
             detail="Dataset not found"
         )
     
-    return DatasetResponse(
-        id=str(dataset.id),
-        tenant_id=str(dataset.tenant_id),
-        name=dataset.name,
-        description=dataset.description,
-        tags=dataset.tags,
-        metadata=dataset.meta_data,
-        is_active=dataset.is_active,
-        created_at=dataset.created_at,
-        updated_at=dataset.updated_at
-    )
+    # Get document statistics
+    documents = db.query(Document).filter(Document.dataset_id == dataset.id).all()
+    total_documents = len(documents)
+    
+    documents_by_status = {}
+    total_file_size = 0
+    latest_document = None
+    latest_update = None
+    
+    for doc in documents:
+        # Count by status
+        status = doc.status or "unknown"
+        documents_by_status[status] = documents_by_status.get(status, 0) + 1
+        
+        # Sum file sizes
+        if doc.file_size:
+            total_file_size += doc.file_size
+            
+        # Track latest document
+        if not latest_document or doc.created_at > latest_document.created_at:
+            latest_document = doc
+            
+        # Track latest update
+        if not latest_update or doc.updated_at > latest_update:
+            latest_update = doc.updated_at
+    
+    # Get chunk statistics
+    total_chunks = db.query(Chunk).join(Document).filter(
+        Document.dataset_id == dataset.id
+    ).count()
+    
+    chunks_with_embeddings = db.query(Chunk).join(Document).filter(
+        Document.dataset_id == dataset.id,
+        Chunk.embedding.isnot(None)
+    ).count()
+    
+    # Get bot assignments
+    from ...models import BotDataset, Bot
+    assigned_bots = db.query(Bot).join(BotDataset).filter(
+        BotDataset.dataset_id == dataset.id,
+        Bot.tenant_id == current_tenant.id
+    ).all()
+    
+    # Get document details for comprehensive view
+    document_details = []
+    for doc in documents[:20]:  # Limit to 20 most recent for performance
+        chunk_count = db.query(Chunk).filter(Chunk.document_id == doc.id).count()
+        doc_chunks_with_embeddings = db.query(Chunk).filter(
+            Chunk.document_id == doc.id,
+            Chunk.embedding.isnot(None)
+        ).count()
+        
+        document_details.append({
+            "id": str(doc.id),
+            "title": doc.title,
+            "source_type": doc.source_type,
+            "status": doc.status,
+            "file_size": doc.file_size,
+            "chunk_count": chunk_count,
+            "chunks_with_embeddings": doc_chunks_with_embeddings,
+            "processing_complete": doc.status == "completed",
+            "created_at": doc.created_at,
+            "updated_at": doc.updated_at,
+            "tags": doc.tags or []
+        })
+    
+    # Calculate processing progress
+    processing_progress = 0
+    if total_chunks > 0:
+        processing_progress = (chunks_with_embeddings / total_chunks) * 100
+    
+    return {
+        "id": str(dataset.id),
+        "tenant_id": str(dataset.tenant_id),
+        "name": dataset.name,
+        "description": dataset.description,
+        "tags": dataset.tags or [],
+        "metadata": dataset.meta_data or {},
+        "is_active": dataset.is_active,
+        "created_at": dataset.created_at,
+        "updated_at": dataset.updated_at,
+        "statistics": {
+            "total_documents": total_documents,
+            "documents_by_status": documents_by_status,
+            "total_chunks": total_chunks,
+            "chunks_with_embeddings": chunks_with_embeddings,
+            "total_file_size": total_file_size,
+            "processing_progress": round(processing_progress, 2),
+            "processing_complete": chunks_with_embeddings == total_chunks and total_chunks > 0
+        },
+        "documents": document_details,
+        "assigned_bots": [
+            {
+                "id": str(bot.id),
+                "name": bot.name,
+                "description": getattr(bot, 'description', None),
+                "is_active": getattr(bot, 'is_active', True),
+                "created_at": getattr(bot, 'created_at', None)
+            }
+            for bot in assigned_bots
+        ],
+        "latest_document": {
+            "id": str(latest_document.id),
+            "title": latest_document.title,
+            "created_at": latest_document.created_at
+        } if latest_document else None,
+        "last_activity": latest_update or dataset.updated_at
+    }
 
 
 @router.put("/{dataset_id}", response_model=DatasetResponse)

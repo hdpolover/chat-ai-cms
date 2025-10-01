@@ -1,9 +1,9 @@
 """Job queue service for background tasks."""
+import os
 import structlog
 from rq import Queue
-from redis import Redis
+import redis
 
-from ..deps import redis_client
 from .document_processing_service import process_document_sync
 
 logger = structlog.get_logger()
@@ -14,7 +14,9 @@ class JobQueueService:
 
     def __init__(self):
         """Initialize the job queue service."""
-        self.redis_conn = redis_client
+        # Create Redis connection specifically for RQ (without decode_responses)
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        self.redis_conn = redis.from_url(redis_url, decode_responses=False)
         self.document_queue = Queue('document_processing', connection=self.redis_conn)
 
     def enqueue_document_processing(self, document_id: str) -> str:

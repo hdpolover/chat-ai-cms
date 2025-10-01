@@ -48,6 +48,26 @@ import TenantLayout from '@/components/layout/TenantLayout';
 // API services
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+interface DocumentDataset {
+  id: string;
+  name: string;
+  description?: string;
+  tags: string[];
+  metadata: any;
+  created_at: string;
+  updated_at: string;
+  total_documents: number;
+  completed_documents: number;
+  total_chunks: number;
+  other_documents: {
+    id: string;
+    title: string;
+    status: string;
+    file_size: number;
+    created_at: string;
+  }[];
+}
+
 interface Document {
   id: string;
   title: string;
@@ -63,6 +83,10 @@ interface Document {
   created_at: string;
   updated_at: string;
   dataset_name?: string;
+  chunk_count?: number;
+  chunks_with_embeddings?: number;
+  processing_complete?: boolean;
+  dataset?: DocumentDataset;
 }
 
 interface Dataset {
@@ -85,6 +109,8 @@ export default function DocumentsPage() {
   const [uploadType, setUploadType] = useState<'file' | 'text'>('file');
   const [textContent, setTextContent] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [documentDetails, setDocumentDetails] = useState<Document | null>(null);
 
   useEffect(() => {
     loadData();
@@ -222,6 +248,28 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleViewDetails = async () => {
+    if (!selectedDocument) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/v1/tenant/documents/${selectedDocument.id}`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch document details');
+      }
+
+      const documentData = await response.json();
+      setDocumentDetails(documentData);
+      setDetailsDialogOpen(true);
+      handleMenuClose();
+    } catch (err) {
+      setError('Failed to load document details. Please try again.');
+      console.error('Error loading document details:', err);
+    }
+  };
+
   const handleDeleteDocument = async () => {
     if (!selectedDocument) return;
 
@@ -259,22 +307,27 @@ export default function DocumentsPage() {
     return null;
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+  const formatFileSize = (bytes: number | null | undefined) => {
+    if (!bytes || bytes === 0 || isNaN(bytes)) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Unknown';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
   };
 
   const filteredDocuments = documents.filter(doc =>
@@ -382,18 +435,18 @@ export default function DocumentsPage() {
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Chip
-                              label={document.status}
-                              color={getStatusColor(document.status) as any}
+                              label={document.status || 'unknown'}
+                              color={getStatusColor(document.status || 'unknown') as any}
                               size="small"
                             />
-                            {getStatusIcon(document.status)}
+                            {getStatusIcon(document.status || 'unknown')}
                           </Box>
                         </TableCell>
                         <TableCell>
                           <Chip 
-                            label={document.source_type} 
+                            label={document.source_type || 'unknown'} 
                             size="small" 
-                            color={document.source_type === 'file' ? 'primary' : 'secondary'}
+                            color={(document.source_type || 'unknown') === 'file' ? 'primary' : 'secondary'}
                           />
                         </TableCell>
                         <TableCell>{formatDate(document.created_at)}</TableCell>
@@ -429,7 +482,7 @@ export default function DocumentsPage() {
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          <MenuItem onClick={handleMenuClose}>
+          <MenuItem onClick={handleViewDetails}>
             <ListItemIcon>
               <Visibility fontSize="small" />
             </ListItemIcon>
@@ -550,6 +603,257 @@ export default function DocumentsPage() {
             >
               Add Document
             </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Document Details Dialog */}
+        <Dialog 
+          open={detailsDialogOpen} 
+          onClose={() => setDetailsDialogOpen(false)} 
+          maxWidth="md" 
+          fullWidth
+        >
+          <DialogTitle>
+            Document Details
+          </DialogTitle>
+          <DialogContent>
+            {documentDetails && (
+              <Box sx={{ pt: 2 }}>
+                <Card sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Basic Information
+                    </Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Title</Typography>
+                        <Typography variant="body1">{documentDetails.title || 'Untitled'}</Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Source Type</Typography>
+                        <Chip 
+                          label={documentDetails.source_type || 'unknown'} 
+                          size="small" 
+                          color={(documentDetails.source_type || 'unknown') === 'file' ? 'primary' : 'secondary'}
+                        />
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">File Size</Typography>
+                        <Typography variant="body1">{formatFileSize(documentDetails.file_size)}</Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Status</Typography>
+                        <Chip
+                          label={documentDetails.status || 'unknown'}
+                          color={getStatusColor(documentDetails.status || 'unknown') as any}
+                          size="small"
+                        />
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Created</Typography>
+                        <Typography variant="body1">{formatDate(documentDetails.created_at)}</Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Updated</Typography>
+                        <Typography variant="body1">{formatDate(documentDetails.updated_at)}</Typography>
+                      </Box>
+                    </Box>
+                    
+                    {/* Processing Information */}
+                    {(documentDetails.chunk_count !== undefined || documentDetails.chunks_with_embeddings !== undefined) && (
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="h6" gutterBottom>
+                          Processing Information
+                        </Typography>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+                          <Box>
+                            <Typography variant="body2" color="text.secondary">Total Chunks</Typography>
+                            <Typography variant="body1">{documentDetails.chunk_count || 0}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="body2" color="text.secondary">Chunks with Embeddings</Typography>
+                            <Typography variant="body1">{documentDetails.chunks_with_embeddings || 0}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="body2" color="text.secondary">Processing Complete</Typography>
+                            <Chip
+                              label={documentDetails.processing_complete ? 'Yes' : 'No'}
+                              color={documentDetails.processing_complete ? 'success' : 'warning'}
+                              size="small"
+                            />
+                          </Box>
+                        </Box>
+                        
+                        {documentDetails.chunk_count && documentDetails.chunks_with_embeddings && (
+                          <Box sx={{ mt: 2 }}>
+                            <Typography variant="body2" color="text.secondary">Embedding Progress</Typography>
+                            <LinearProgress 
+                              variant="determinate" 
+                              value={(documentDetails.chunks_with_embeddings / documentDetails.chunk_count) * 100}
+                              sx={{ mt: 1, height: 8, borderRadius: 1 }}
+                            />
+                            <Typography variant="caption" color="text.secondary">
+                              {documentDetails.chunks_with_embeddings} / {documentDetails.chunk_count} chunks processed
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    )}
+                    
+                    {documentDetails.source_url && (
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="body2" color="text.secondary">Source URL</Typography>
+                        <Typography variant="body1" sx={{ wordBreak: 'break-all' }}>
+                          <a href={documentDetails.source_url} target="_blank" rel="noopener noreferrer">
+                            {documentDetails.source_url}
+                          </a>
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {documentDetails.error_message && (
+                      <Alert severity="error" sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          <strong>Processing Error:</strong><br/>
+                          {documentDetails.error_message}
+                        </Typography>
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                {documentDetails.tags && documentDetails.tags.length > 0 && (
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Tags
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {documentDetails.tags.map((tag, index) => (
+                          <Chip key={index} label={tag} size="small" variant="outlined" />
+                        ))}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                {/* Dataset Information */}
+                {documentDetails.dataset && (
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Dataset: {documentDetails.dataset.name}
+                      </Typography>
+                      
+                      {documentDetails.dataset.description && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          {documentDetails.dataset.description}
+                        </Typography>
+                      )}
+                      
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, mb: 2 }}>
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Total Documents</Typography>
+                          <Typography variant="h6">{documentDetails.dataset.total_documents}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Completed Documents</Typography>
+                          <Typography variant="h6" color={documentDetails.dataset.completed_documents === documentDetails.dataset.total_documents ? 'success.main' : 'warning.main'}>
+                            {documentDetails.dataset.completed_documents}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Total Chunks</Typography>
+                          <Typography variant="h6">{documentDetails.dataset.total_chunks}</Typography>
+                        </Box>
+                      </Box>
+                      
+                      {documentDetails.dataset.tags && documentDetails.dataset.tags.length > 0 && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
+                            Dataset Tags
+                          </Typography>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                            {documentDetails.dataset.tags.map((tag, index) => (
+                              <Chip key={index} label={tag} size="small" color="primary" variant="outlined" />
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
+                      
+                      {documentDetails.dataset.other_documents && documentDetails.dataset.other_documents.length > 0 && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
+                            Other Documents in Dataset
+                          </Typography>
+                          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200 }}>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Title</TableCell>
+                                  <TableCell>Status</TableCell>
+                                  <TableCell>Size</TableCell>
+                                  <TableCell>Created</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {documentDetails.dataset.other_documents.map((doc) => (
+                                  <TableRow key={doc.id} hover>
+                                    <TableCell>
+                                      <Typography variant="body2">{doc.title}</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip
+                                        label={doc.status}
+                                        color={getStatusColor(doc.status) as any}
+                                        size="small"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2">{formatFileSize(doc.file_size)}</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2">{formatDate(doc.created_at)}</Typography>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                          {documentDetails.dataset.total_documents > documentDetails.dataset.other_documents.length + 1 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                              Showing {documentDetails.dataset.other_documents.length} of {documentDetails.dataset.total_documents - 1} other documents
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+                
+                {documentDetails.metadata && Object.keys(documentDetails.metadata).length > 0 && (
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Document Metadata
+                      </Typography>
+                      <Box component="pre" sx={{ 
+                        backgroundColor: 'grey.100', 
+                        p: 2, 
+                        borderRadius: 1, 
+                        overflow: 'auto',
+                        fontSize: '0.875rem'
+                      }}>
+                        {JSON.stringify(documentDetails.metadata, null, 2)}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                )}
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
       </TenantLayout>

@@ -71,9 +71,15 @@ app = FastAPI(
 )
 
 # Configure CORS
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:8080").split(",")
+
+# For development, allow all origins if CORS_ORIGINS includes "*" or if it's development mode
+if "*" in cors_origins or os.getenv("ENVIRONMENT", "development") == "development":
+    cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002").split(","),
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -171,13 +177,24 @@ except ImportError as e:
 
 # Include tenant routers
 try:
-    from .routers.tenant import auth as tenant_auth, bots as tenant_bots, ai_providers as tenant_ai_providers, datasets as tenant_datasets, documents as tenant_documents, dashboard as tenant_dashboard
+    from .routers.tenant import (
+        auth as tenant_auth, 
+        bots as tenant_bots, 
+        ai_providers as tenant_ai_providers, 
+        datasets as tenant_datasets, 
+        documents as tenant_documents, 
+        dashboard as tenant_dashboard,
+        conversations as tenant_conversations,
+        scopes as tenant_scopes
+    )
     app.include_router(tenant_auth.router)
     app.include_router(tenant_bots.router)
     app.include_router(tenant_ai_providers.router)
     app.include_router(tenant_datasets.router)
     app.include_router(tenant_documents.router)
     app.include_router(tenant_dashboard.router)
+    app.include_router(tenant_conversations.router)
+    app.include_router(tenant_scopes.router)
     logger.info("Tenant routes loaded successfully")
 except ImportError as e:
     logger.warning("Tenant routes not available", error=str(e))

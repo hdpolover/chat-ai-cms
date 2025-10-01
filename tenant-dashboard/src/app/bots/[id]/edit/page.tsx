@@ -4,40 +4,37 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
+  Paper,
   Typography,
-  Button,
-  Card,
-  CardContent,
-  IconButton,
-  Alert,
-  Snackbar,
-  CircularProgress,
   TextField,
+  Button,
+  Stepper,
+  Step,
+  StepLabel,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Switch,
-  FormControlLabel,
-  Slider,
-  OutlinedInput,
+  Alert,
+  Autocomplete,
   Chip,
-  Stepper,
-  Step,
-  StepLabel,
-  Divider,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
   Checkbox,
-  Paper,
+  Container,
+  CircularProgress,
+  IconButton,
+  Card,
+  CardContent,
+  FormHelperText,
+  Slider,
   Tabs,
   Tab,
-  FormHelperText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  FormControlLabel,
+  Switch,
+  Snackbar,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -47,7 +44,6 @@ import {
   Storage,
   Security,
   Language,
-  ExpandMore,
   Add,
   Remove,
   Info,
@@ -105,6 +101,10 @@ export default function EditBotPage() {
   const [aiProviders, setAiProviders] = useState<TenantAIProvider[]>([]);
   const [availableDatasets, setAvailableDatasets] = useState<Dataset[]>([]);
   const [availableScopes, setAvailableScopes] = useState<any[]>([]);
+  const [customScopes, setCustomScopes] = useState<any[]>([]);
+  const [showCustomScopeForm, setShowCustomScopeForm] = useState(false);
+  const [customScopeName, setCustomScopeName] = useState('');
+  const [customScopeDescription, setCustomScopeDescription] = useState('');
   
   // Form data
   const [botData, setBotData] = useState<UpdateBotRequest & { 
@@ -123,15 +123,38 @@ export default function EditBotPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('Loading bot edit data...');
+      
       const [botResponse, providersData, datasetsData] = await Promise.all([
         BotService.getBot(botId),
         BotService.getTenantAIProviders(),
         DatasetService.getAvailableDatasets()
       ]);
       
+      console.log('Loaded data:', {
+        bot: botResponse?.name,
+        providers: providersData?.length || 0,
+        datasets: datasetsData?.length || 0
+      });
+      
+      if (!botResponse) {
+        throw new Error('Bot not found');
+      }
+      
       setBot(botResponse);
-      setAiProviders(providersData);
-      setAvailableDatasets(datasetsData);
+      setAiProviders(providersData || []);
+      setAvailableDatasets(datasetsData || []);
+      
+      // Debug AI providers
+      if (providersData?.length > 0) {
+        console.log('AI Providers:', providersData.map(p => ({
+          id: p.id,
+          name: p.provider_name,
+          settings: p.custom_settings
+        })));
+      }
       
       // Initialize form data with bot data
       setBotData({
@@ -146,19 +169,49 @@ export default function EditBotPage() {
         is_public: botResponse.is_public,
         allowed_domains: botResponse.allowed_domains || [],
         dataset_ids: botResponse.datasets?.map(d => d.id) || [],
-        scope_ids: botResponse.scopes?.map(s => s.id) || [],
+        scope_ids: botResponse.scopes?.map(s => s.id) || [], // Keep existing scope IDs
       });
       
-      // Load scopes if available
+      // Load available scopes from templates
       try {
-        setAvailableScopes([]);
+        // Import ScopeService to get templates
+        const { ScopeService } = await import('@/services/scope');
+        const scopeTemplates = ScopeService.getScopeTemplates();
+        
+        // Convert templates to available scopes format
+        const availableScopes = scopeTemplates.map(template => ({
+          id: template.config.name, // Use name as ID for templates
+          name: template.name,
+          description: template.description,
+          category: template.category,
+          is_active: true,
+          template: true, // Mark as template
+          config: template.config
+        }));
+        
+        // Also load existing bot scopes
+        const existingScopes = botResponse.scopes?.map(scope => ({
+          id: scope.id,
+          name: scope.name,
+          description: scope.description,
+          category: 'Existing',
+          is_active: scope.is_active,
+          template: false,
+          existing: true,
+          config: scope
+        })) || [];
+        
+        // Combine templates and existing scopes
+        const allScopes = [...existingScopes, ...availableScopes];
+        setAvailableScopes(allScopes);
+        console.log('Loaded scopes:', allScopes.length, '(', existingScopes.length, 'existing +', availableScopes.length, 'templates)');
       } catch (error) {
-        console.error('Failed to load scopes:', error);
+        console.error('Failed to load scope templates:', error);
         setAvailableScopes([]);
       }
     } catch (error) {
       console.error('Failed to load bot data:', error);
-      setError('Failed to load bot data');
+      setError(`Failed to load bot data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -174,7 +227,64 @@ export default function EditBotPage() {
         return;
       }
 
-      await BotService.updateBot(botId, botData);
+      // Handle scope creation from templates (only create new template scopes, not existing ones)
+      if (botData.scope_ids && botData.scope_ids.length > 0) {
+        try {
+          const { ScopeService } = await import('@/services/scope');
+          const scopeTemplates = ScopeService.getScopeTemplates();
+          
+          for (const scopeId of botData.scope_ids) {
+            // Skip existing scopes (UUIDs) - only process template scopes
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scopeId);
+            if (isUUID) {
+              console.log(`Skipping existing scope: ${scopeId}`);
+              continue;
+            }
+            
+            // Check if this is a template scope (custom_ prefix or template name)
+            const template = scopeTemplates.find(t => t.config.name === scopeId || t.name === scopeId);
+            if (template) {
+              // Create the scope from template
+              try {
+                await ScopeService.createBotScope(botId, {
+                  name: template.name,
+                  description: template.description,
+                  guardrails: template.config.guardrails,
+                  dataset_filters: {},
+                  is_active: true
+                });
+                console.log(`Created scope from template: ${template.name}`);
+              } catch (scopeError) {
+                console.log(`Scope ${template.name} may already exist, continuing...`);
+              }
+            }
+          }
+        } catch (scopeError) {
+          console.error('Error creating scopes:', scopeError);
+          // Don't fail the bot update if scope creation fails
+        }
+      }
+
+      // Get current bot scopes after creation to send actual scope IDs
+      let actualScopeIds: string[] = [];
+      try {
+        const currentScopes = await BotService.getBotScopes(botId);
+        actualScopeIds = currentScopes.map(scope => scope.id);
+        console.log(`Current bot scopes after creation: ${actualScopeIds.length} scopes`);
+      } catch (error) {
+        console.error('Failed to get current scopes:', error);
+      }
+
+      // Prepare update data with actual scope IDs
+      const updateData = {
+        ...botData,
+        scope_ids: actualScopeIds, // Use actual scope IDs instead of template names
+        dataset_ids: botData.dataset_ids
+      };
+
+      console.log('Updating bot with data:', updateData);
+
+      await BotService.updateBot(botId, updateData);
       setSuccess('Bot updated successfully');
       
       // Navigate back to bot details after a short delay
@@ -183,7 +293,7 @@ export default function EditBotPage() {
       }, 1500);
     } catch (error) {
       console.error('Failed to update bot:', error);
-      setError('Failed to update bot');
+      setError(`Failed to update bot: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -191,8 +301,46 @@ export default function EditBotPage() {
 
   const getAvailableModels = (providerId: string) => {
     const provider = aiProviders.find(p => p.id === providerId);
-    if (!provider?.custom_settings?.supported_models) return [];
-    return provider.custom_settings.supported_models;
+    if (!provider?.custom_settings) return [];
+    
+    // Check for supported_models array first
+    if (provider.custom_settings.supported_models && Array.isArray(provider.custom_settings.supported_models)) {
+      return provider.custom_settings.supported_models;
+    }
+    
+    // Fallback: get models from provider type
+    const providerName = provider.provider_name?.toLowerCase();
+    if (providerName === 'openai') {
+      return [
+        'gpt-4',
+        'gpt-4-0613',
+        'gpt-4-32k',
+        'gpt-3.5-turbo',
+        'gpt-3.5-turbo-0613',
+        'gpt-3.5-turbo-16k'
+      ];
+    } else if (providerName === 'anthropic') {
+      return [
+        'claude-3-opus-20240229',
+        'claude-3-sonnet-20240229',
+        'claude-3-haiku-20240307',
+        'claude-2.1',
+        'claude-2.0'
+      ];
+    } else if (providerName === 'google') {
+      return [
+        'gemini-pro',
+        'gemini-pro-vision',
+        'gemini-ultra'
+      ];
+    }
+    
+    // Last fallback: if there's a model field, use it
+    if (provider.custom_settings.model) {
+      return [provider.custom_settings.model];
+    }
+    
+    return [];
   };
 
   const handleNext = () => {
@@ -230,12 +378,48 @@ export default function EditBotPage() {
   };
 
   const handleScopeToggle = (scopeId: string) => {
+    console.log('Toggling scope:', scopeId);
+    
     const currentScopes = botData.scope_ids || [];
     const newScopes = currentScopes.includes(scopeId)
       ? currentScopes.filter(id => id !== scopeId)
       : [...currentScopes, scopeId];
     
+    console.log('Updated scopes:', { from: currentScopes, to: newScopes });
     setBotData({ ...botData, scope_ids: newScopes });
+  };
+
+  const handleAddCustomScope = () => {
+    if (!customScopeName.trim()) return;
+    
+    const newCustomScope = {
+      id: `custom_${Date.now()}_${customScopeName.toLowerCase().replace(/\s+/g, '_')}`,
+      name: customScopeName,
+      description: customScopeDescription || `Custom scope: ${customScopeName}`,
+      category: 'Custom',
+      is_active: true,
+      template: false,
+      custom: true,
+      config: {
+        name: customScopeName.toLowerCase().replace(/\s+/g, '_'),
+        description: customScopeDescription || `Custom scope: ${customScopeName}`,
+        guardrails: {
+          response_guidelines: {
+            max_response_length: 400,
+            require_citations: true
+          }
+        },
+        is_active: true
+      }
+    };
+    
+    setCustomScopes(prev => [...prev, newCustomScope]);
+    setCustomScopeName('');
+    setCustomScopeDescription('');
+    setShowCustomScopeForm(false);
+    
+    // Automatically select the new custom scope
+    handleScopeToggle(newCustomScope.id);
   };
 
   const isStepComplete = (step: number) => {
@@ -412,16 +596,28 @@ export default function EditBotPage() {
                             });
                           }}
                         >
-                          {aiProviders.map((provider) => (
-                            <MenuItem key={provider.id} value={provider.id}>
-                              <Box>
-                                <Typography variant="body1">{provider.provider_name}</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {provider.custom_settings?.supported_models?.length || 0} models available
-                                </Typography>
-                              </Box>
+                          {aiProviders.length > 0 ? aiProviders.map((provider) => {
+                            const availableModels = getAvailableModels(provider.id);
+                            return (
+                              <MenuItem key={provider.id} value={provider.id}>
+                                <Box>
+                                  <Typography variant="body1">
+                                    {provider.provider_name || 'Unknown Provider'}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {availableModels.length} models available
+                                    {provider.is_active ? '' : ' (Inactive)'}
+                                  </Typography>
+                                </Box>
+                              </MenuItem>
+                            );
+                          }) : (
+                            <MenuItem disabled>
+                              <Typography color="text.secondary">
+                                No AI providers configured
+                              </Typography>
                             </MenuItem>
-                          ))}
+                          )}
                         </Select>
                         <FormHelperText>Select the AI provider to power this bot</FormHelperText>
                       </FormControl>
@@ -433,13 +629,34 @@ export default function EditBotPage() {
                           label="Model"
                           onChange={(e) => setBotData({ ...botData, model: e.target.value })}
                         >
-                          {getAvailableModels(botData.tenant_ai_provider_id || '').map((model: string) => (
-                            <MenuItem key={model} value={model}>
-                              {model}
+                          {botData.tenant_ai_provider_id ? (
+                            getAvailableModels(botData.tenant_ai_provider_id).length > 0 ? (
+                              getAvailableModels(botData.tenant_ai_provider_id).map((model: string) => (
+                                <MenuItem key={model} value={model}>
+                                  {model}
+                                </MenuItem>
+                              ))
+                            ) : (
+                              <MenuItem disabled>
+                                <Typography color="text.secondary">
+                                  No models available for selected provider
+                                </Typography>
+                              </MenuItem>
+                            )
+                          ) : (
+                            <MenuItem disabled>
+                              <Typography color="text.secondary">
+                                Select an AI provider first
+                              </Typography>
                             </MenuItem>
-                          ))}
+                          )}
                         </Select>
-                        <FormHelperText>Choose the specific AI model for this bot</FormHelperText>
+                        <FormHelperText>
+                          {!botData.tenant_ai_provider_id 
+                            ? 'Select an AI provider first to see available models'
+                            : 'Choose the specific AI model for this bot'
+                          }
+                        </FormHelperText>
                       </FormControl>
                       
                       <TextField
@@ -554,29 +771,131 @@ export default function EditBotPage() {
                       {availableScopes.length === 0 ? (
                         <Paper sx={{ p: 3, textAlign: 'center' }}>
                           <Typography variant="body1" color="text.secondary">
-                            No scopes configured. Scopes help control bot permissions and access.
+                            Loading available scopes...
                           </Typography>
-                          <Button variant="outlined" sx={{ mt: 2 }}>
-                            Configure Scopes
-                          </Button>
+                          <CircularProgress size={24} sx={{ mt: 2 }} />
                         </Paper>
                       ) : (
-                        <List>
-                          {availableScopes.map((scope) => (
-                            <ListItem key={scope.id} sx={{ border: 1, borderColor: 'divider', mb: 1, borderRadius: 1 }}>
-                              <ListItemIcon>
-                                <Checkbox
-                                  checked={botData.scope_ids?.includes(scope.id) || false}
-                                  onChange={() => handleScopeToggle(scope.id)}
+                        <Box>
+                          <Box sx={{ mb: 3 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                Select scope templates or create custom scopes to control bot behavior:
+                              </Typography>
+                              <Button
+                                variant="outlined" 
+                                size="small"
+                                onClick={() => setShowCustomScopeForm(true)}
+                                sx={{ ml: 2 }}
+                              >
+                                Add Custom Scope
+                              </Button>
+                            </Box>
+                            
+                            {showCustomScopeForm && (
+                              <Paper sx={{ p: 3, mb: 3, border: 1, borderColor: 'primary.main' }}>
+                                <Typography variant="h6" sx={{ mb: 2 }}>Create Custom Scope</Typography>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                  <TextField
+                                    label="Scope Name"
+                                    value={customScopeName}
+                                    onChange={(e) => setCustomScopeName(e.target.value)}
+                                    placeholder="e.g., HR Assistant, Legal Support"
+                                    required
+                                  />
+                                  <TextField
+                                    label="Description"
+                                    value={customScopeDescription}
+                                    onChange={(e) => setCustomScopeDescription(e.target.value)}
+                                    placeholder="Describe what this scope does..."
+                                    multiline
+                                    rows={2}
+                                  />
+                                  <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <Button
+                                      variant="contained"
+                                      onClick={handleAddCustomScope}
+                                      disabled={!customScopeName.trim()}
+                                    >
+                                      Create Scope
+                                    </Button>
+                                    <Button
+                                      variant="outlined"
+                                      onClick={() => {
+                                        setShowCustomScopeForm(false);
+                                        setCustomScopeName('');
+                                        setCustomScopeDescription('');
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </Box>
+                                </Box>
+                              </Paper>
+                            )}
+                          </Box>
+                          
+                          <List>
+                            {[...availableScopes, ...customScopes].map((scope) => (
+                              <ListItem key={scope.id} sx={{ border: 1, borderColor: 'divider', mb: 1, borderRadius: 1 }}>
+                                <ListItemIcon>
+                                  <Checkbox
+                                    checked={botData.scope_ids?.includes(scope.id) || false}
+                                    onChange={() => {
+                                      console.log('Checkbox clicked for scope:', scope.id);
+                                      handleScopeToggle(scope.id);
+                                    }}
+                                  />
+                                </ListItemIcon>
+                                <ListItemText
+                                  primary={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="subtitle2">{scope.name}</Typography>
+                                      {scope.category && (
+                                        <Chip 
+                                          label={scope.category} 
+                                          size="small" 
+                                          variant="outlined"
+                                          color="primary"
+                                        />
+                                      )}
+                                    </Box>
+                                  }
+                                  secondary={
+                                    <Box>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {scope.description || 'No description'}
+                                      </Typography>
+                                      {scope.existing && (
+                                        <Typography variant="caption" color="success.main">
+                                          Existing Scope - Already configured for this bot
+                                        </Typography>
+                                      )}
+                                      {scope.template && (
+                                        <Typography variant="caption" color="primary">
+                                          Template - Will be created when bot is saved
+                                        </Typography>
+                                      )}
+                                      {scope.custom && (
+                                        <Typography variant="caption" color="secondary">
+                                          Custom Scope
+                                        </Typography>
+                                      )}
+                                    </Box>
+                                  }
                                 />
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={scope.name}
-                                secondary={scope.description || 'No description'}
-                              />
-                            </ListItem>
-                          ))}
-                        </List>
+                              </ListItem>
+                            ))}
+                          </List>
+                          
+                          {botData.scope_ids && botData.scope_ids.length > 0 && (
+                            <Alert severity="info" sx={{ mt: 2 }}>
+                              <Typography variant="body2">
+                                {botData.scope_ids.length} scope(s) selected. These will be applied to restrict the bot's behavior according to the selected templates.
+                              </Typography>
+                            </Alert>
+                          )}
+                        </Box>
                       )}
                     </TabPanel>
                   </Box>
@@ -591,70 +910,68 @@ export default function EditBotPage() {
                     </Typography>
                     
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <Accordion>
-                        <AccordionSummary expandIcon={<ExpandMore />}>
-                          <Typography variant="h6">Visibility Settings</Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                          <FormControlLabel
-                            control={
-                              <Switch
-                                checked={botData.is_public || false}
-                                onChange={(e) => setBotData({ ...botData, is_public: e.target.checked })}
-                              />
-                            }
-                            label="Public Bot"
-                          />
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            Public bots can be accessed by users outside your organization
-                          </Typography>
-                        </AccordionDetails>
-                      </Accordion>
+                      <Paper sx={{ p: 3, border: 1, borderColor: 'divider' }}>
+                        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                          <Security sx={{ mr: 1, fontSize: 20 }} />
+                          Visibility Settings
+                        </Typography>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={botData.is_public || false}
+                              onChange={(e) => setBotData({ ...botData, is_public: e.target.checked })}
+                            />
+                          }
+                          label="Public Bot"
+                        />
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          Public bots can be accessed by users outside your organization
+                        </Typography>
+                      </Paper>
 
                       {botData.is_public && (
-                        <Accordion>
-                          <AccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6">Domain Restrictions</Typography>
-                          </AccordionSummary>
-                          <AccordionDetails>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                              Restrict access to specific domains. Leave empty to allow all domains.
-                            </Typography>
-                            
-                            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                              <TextField
-                                label="Add Domain"
-                                value={domainInput}
-                                onChange={(e) => setDomainInput(e.target.value)}
-                                placeholder="example.com"
-                                onKeyPress={(e) => e.key === 'Enter' && addDomain()}
-                                fullWidth
-                              />
-                              <Button 
-                                variant="outlined" 
-                                onClick={addDomain}
-                                startIcon={<Add />}
-                                disabled={!domainInput.trim()}
-                              >
-                                Add
-                              </Button>
+                        <Paper sx={{ p: 3, border: 1, borderColor: 'divider' }}>
+                          <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                            <Language sx={{ mr: 1, fontSize: 20 }} />
+                            Domain Restrictions
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Restrict access to specific domains. Leave empty to allow all domains.
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                            <TextField
+                              label="Add Domain"
+                              value={domainInput}
+                              onChange={(e) => setDomainInput(e.target.value)}
+                              placeholder="example.com"
+                              onKeyPress={(e) => e.key === 'Enter' && addDomain()}
+                              fullWidth
+                            />
+                            <Button 
+                              variant="outlined" 
+                              onClick={addDomain}
+                              startIcon={<Add />}
+                              disabled={!domainInput.trim()}
+                            >
+                              Add
+                            </Button>
+                          </Box>
+                          
+                          {botData.allowed_domains && botData.allowed_domains.length > 0 && (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                              {botData.allowed_domains.map((domain) => (
+                                <Chip
+                                  key={domain}
+                                  label={domain}
+                                  deleteIcon={<Remove />}
+                                  onDelete={() => removeDomain(domain)}
+                                  icon={<Language />}
+                                />
+                              ))}
                             </Box>
-                            
-                            {botData.allowed_domains && botData.allowed_domains.length > 0 && (
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                {botData.allowed_domains.map((domain) => (
-                                  <Chip
-                                    key={domain}
-                                    label={domain}
-                                    deleteIcon={<Remove />}
-                                    onDelete={() => removeDomain(domain)}
-                                    icon={<Language />}
-                                  />
-                                ))}
-                              </Box>
-                            )}
-                          </AccordionDetails>
-                        </Accordion>
+                          )}
+                        </Paper>
                       )}
                     </Box>
                   </Box>
@@ -700,6 +1017,26 @@ export default function EditBotPage() {
                           <Typography variant="h6" gutterBottom>Knowledge & Access</Typography>
                           <Typography><strong>Datasets:</strong> {botData.dataset_ids?.length || 0} selected</Typography>
                           <Typography><strong>Scopes:</strong> {botData.scope_ids?.length || 0} selected</Typography>
+                          {botData.scope_ids && botData.scope_ids.length > 0 && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="body2" color="text.secondary">Selected scopes:</Typography>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                                {botData.scope_ids.map(scopeId => {
+                                  const allScopes = [...availableScopes, ...customScopes];
+                                  const scope = allScopes.find(s => s.id === scopeId);
+                                  return scope ? (
+                                    <Chip 
+                                      key={scopeId}
+                                      label={scope.name} 
+                                      size="small" 
+                                      color={scope.custom ? "secondary" : "primary"}
+                                      variant="outlined"
+                                    />
+                                  ) : null;
+                                })}
+                              </Box>
+                            </Box>
+                          )}
                           <Typography><strong>Visibility:</strong> {botData.is_public ? 'Public' : 'Private'}</Typography>
                           {botData.allowed_domains && botData.allowed_domains.length > 0 && (
                             <Typography><strong>Allowed Domains:</strong> {botData.allowed_domains.join(', ')}</Typography>

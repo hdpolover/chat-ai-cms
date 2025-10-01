@@ -399,13 +399,13 @@ async def upload_document_file(
     )
 
 
-@router.get("/documents/{document_id}", response_model=DocumentResponse)
+@router.get("/documents/{document_id}")
 async def get_document(
     document_id: UUID,
     db: Session = Depends(get_sync_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
-    """Get a specific document by ID."""
+    """Get a specific document by ID with enhanced details."""
     
     # Query with join to verify tenant ownership
     document = db.query(Document).join(Dataset).filter(
@@ -419,21 +419,76 @@ async def get_document(
             detail="Document not found"
         )
     
-    return DocumentResponse(
-        id=str(document.id),
-        dataset_id=str(document.dataset_id),
-        title=document.title,
-        source_type=document.source_type,
-        source_url=document.source_url,
-        tags=document.tags,
-        metadata=document.meta_data,
-        content_hash=document.content_hash,
-        status=document.status,
-        error_message=document.error_message,
-        file_size=document.file_size,
-        created_at=document.created_at,
-        updated_at=document.updated_at
-    )
+    # Get chunk statistics
+    chunk_count = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+    chunks_with_embeddings = db.query(Chunk).filter(
+        Chunk.document_id == document.id,
+        Chunk.embedding.isnot(None)
+    ).count()
+    
+    # Get dataset with full details
+    dataset = db.query(Dataset).filter(Dataset.id == document.dataset_id).first()
+    dataset_info = None
+    if dataset:
+        # Get other documents in this dataset
+        other_documents = db.query(Document).filter(
+            Document.dataset_id == dataset.id,
+            Document.id != document.id
+        ).all()
+        
+        # Calculate dataset statistics
+        total_docs = db.query(Document).filter(Document.dataset_id == dataset.id).count()
+        completed_docs = db.query(Document).filter(
+            Document.dataset_id == dataset.id,
+            Document.status == "completed"
+        ).count()
+        total_chunks = db.query(Chunk).join(Document).filter(
+            Document.dataset_id == dataset.id
+        ).count()
+        
+        dataset_info = {
+            "id": str(dataset.id),
+            "name": dataset.name,
+            "description": dataset.description,
+            "tags": dataset.tags or [],
+            "metadata": dataset.meta_data or {},
+            "created_at": dataset.created_at,
+            "updated_at": dataset.updated_at,
+            "total_documents": total_docs,
+            "completed_documents": completed_docs,
+            "total_chunks": total_chunks,
+            "other_documents": [
+                {
+                    "id": str(doc.id),
+                    "title": doc.title,
+                    "status": doc.status,
+                    "file_size": doc.file_size,
+                    "created_at": doc.created_at
+                }
+                for doc in other_documents[:10]  # Limit to 10 for performance
+            ]
+        }
+    
+    return {
+        "id": str(document.id),
+        "dataset_id": str(document.dataset_id),
+        "dataset_name": dataset.name if dataset else None,
+        "title": document.title or "Untitled",
+        "source_type": document.source_type or "unknown",
+        "source_url": document.source_url,
+        "tags": document.tags or [],
+        "metadata": document.meta_data or {},
+        "content_hash": document.content_hash,
+        "status": document.status or "unknown",
+        "error_message": document.error_message,
+        "file_size": document.file_size or 0,
+        "created_at": document.created_at,
+        "updated_at": document.updated_at,
+        "chunk_count": chunk_count,
+        "chunks_with_embeddings": chunks_with_embeddings,
+        "processing_complete": document.status == "completed",
+        "dataset": dataset_info
+    }
 
 
 @router.get("/documents/{document_id}/content")

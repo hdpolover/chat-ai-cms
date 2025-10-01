@@ -16,7 +16,7 @@ from .auth import get_current_tenant
 router = APIRouter(prefix="/v1/tenant/bots", tags=["Tenant - Bots"])
 
 
-@router.get("/", response_model=List[BotResponse])
+@router.get("/")
 async def list_bots(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -58,12 +58,19 @@ async def list_bots(
             scopes=[{
                 "id": str(scope.id),
                 "name": scope.name,
-                "description": scope.description
+                "description": scope.description,
+                "guardrails": scope.guardrails,
+                "is_active": scope.is_active,
+                "created_at": scope.created_at.isoformat(),
+                "updated_at": scope.updated_at.isoformat()
             } for scope in bot.scopes] if bot.scopes else [],
             datasets=[{
                 "id": str(dataset.id),
                 "name": dataset.name,
-                "description": dataset.description
+                "description": dataset.description,
+                "tags": dataset.tags if dataset.tags else [],
+                "created_at": dataset.created_at.isoformat(),
+                "updated_at": dataset.updated_at.isoformat()
             } for dataset in bot.datasets] if bot.datasets else []
         )
         for bot in bots
@@ -216,7 +223,8 @@ async def get_bot(
     
     bot = db.query(Bot).options(
         joinedload(Bot.ai_provider),
-        joinedload(Bot.scopes)
+        joinedload(Bot.scopes),
+        joinedload(Bot.datasets)
     ).filter(
         Bot.id == bot_id,
         Bot.tenant_id == current_tenant.id
@@ -248,8 +256,20 @@ async def get_bot(
         scopes=[{
             "id": str(scope.id),
             "name": scope.name,
-            "description": scope.description
-        } for scope in bot.scopes] if bot.scopes else []
+            "description": scope.description,
+            "guardrails": scope.guardrails,
+            "is_active": scope.is_active,
+            "created_at": scope.created_at.isoformat(),
+            "updated_at": scope.updated_at.isoformat()
+        } for scope in bot.scopes] if bot.scopes else [],
+        datasets=[{
+            "id": str(dataset.id),
+            "name": dataset.name,
+            "description": dataset.description,
+            "tags": dataset.tags if dataset.tags else [],
+            "created_at": dataset.created_at.isoformat(),
+            "updated_at": dataset.updated_at.isoformat()
+        } for dataset in bot.datasets] if bot.datasets else []
     )
 
 
@@ -287,20 +307,84 @@ async def update_bot(
                 detail="Invalid AI provider or provider not active"
             )
     
-    # Update bot fields
-    update_data = bot_data.dict(exclude_unset=True)
+    # Handle dataset relationships first
+    if bot_data.dataset_ids is not None:
+        # Remove existing dataset associations
+        db.query(BotDataset).filter(BotDataset.bot_id == bot_id).delete()
+        
+        # Add new dataset associations
+        if bot_data.dataset_ids:
+            # Verify datasets belong to this tenant
+            valid_datasets = db.query(Dataset).filter(
+                Dataset.id.in_(bot_data.dataset_ids),
+                Dataset.tenant_id == current_tenant.id
+            ).all()
+            
+            if len(valid_datasets) != len(bot_data.dataset_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="One or more datasets not found or not accessible"
+                )
+            
+            # Create new associations
+            for dataset_id in bot_data.dataset_ids:
+                bot_dataset = BotDataset(bot_id=bot_id, dataset_id=dataset_id)
+                db.add(bot_dataset)
+    
+    # Handle scope relationships
+    if bot_data.scope_ids is not None:
+        if not bot_data.scope_ids:
+            # Empty list means remove all scopes
+            db.query(Scope).filter(Scope.bot_id == bot_id).delete()
+        else:
+            # Non-empty list: keep only the specified scopes, remove others
+            # First, verify all provided scope IDs exist and belong to this bot
+            existing_scopes = db.query(Scope).filter(
+                Scope.bot_id == bot_id
+            ).all()
+            
+            # Get IDs of existing scopes
+            existing_scope_ids = {str(scope.id) for scope in existing_scopes}
+            provided_scope_ids = set(bot_data.scope_ids)
+            
+            # Filter out non-existent scope IDs instead of failing
+            # Only keep scope IDs that actually exist
+            valid_scope_ids = provided_scope_ids & existing_scope_ids
+            missing_scope_ids = provided_scope_ids - existing_scope_ids
+            
+            if missing_scope_ids:
+                # Log the missing scope IDs but don't fail the request
+                import structlog
+                logger = structlog.get_logger()
+                logger.warning("Some scope IDs not found, filtering them out", 
+                             missing_scopes=list(missing_scope_ids),
+                             valid_scopes=list(valid_scope_ids),
+                             bot_id=str(bot_id))
+            
+            # Update provided_scope_ids to only include valid ones
+            provided_scope_ids = valid_scope_ids
+            
+            # Remove scopes that are NOT in the provided list
+            scopes_to_remove = existing_scope_ids - provided_scope_ids
+            if scopes_to_remove:
+                db.query(Scope).filter(
+                    Scope.bot_id == bot_id,
+                    Scope.id.in_(scopes_to_remove)
+                ).delete(synchronize_session=False)
+
+    # Update bot fields (exclude dataset_ids and scope_ids as they're handled separately)
+    update_data = bot_data.dict(exclude_unset=True, exclude={'dataset_ids', 'scope_ids'})
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         for field, value in update_data.items():
             setattr(bot, field, value)
-    
+
     db.commit()
-    db.refresh(bot)
-    
-    # Load relationships
+    db.refresh(bot)    # Load relationships
     bot = db.query(Bot).options(
         joinedload(Bot.ai_provider),
-        joinedload(Bot.scopes)
+        joinedload(Bot.scopes),
+        joinedload(Bot.datasets)
     ).filter(Bot.id == bot.id).first()
     
     return BotResponse(
@@ -323,8 +407,20 @@ async def update_bot(
         scopes=[{
             "id": str(scope.id),
             "name": scope.name,
-            "description": scope.description
-        } for scope in bot.scopes] if bot.scopes else []
+            "description": scope.description,
+            "guardrails": scope.guardrails,
+            "is_active": scope.is_active,
+            "created_at": scope.created_at.isoformat(),
+            "updated_at": scope.updated_at.isoformat()
+        } for scope in bot.scopes] if bot.scopes else [],
+        datasets=[{
+            "id": str(dataset.id),
+            "name": dataset.name,
+            "description": dataset.description,
+            "tags": dataset.tags if dataset.tags else [],
+            "created_at": dataset.created_at.isoformat(),
+            "updated_at": dataset.updated_at.isoformat()
+        } for dataset in bot.datasets] if bot.datasets else []
     )
 
 
@@ -418,7 +514,8 @@ async def list_bot_scopes(
             "id": str(scope.id),
             "name": scope.name,
             "description": scope.description,
-            "config": scope.config,
+            "dataset_filters": scope.dataset_filters,
+            "guardrails": scope.guardrails,
             "is_active": scope.is_active
         }
         for scope in bot_with_scopes.scopes

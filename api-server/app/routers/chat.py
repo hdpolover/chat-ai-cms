@@ -1,10 +1,12 @@
 """Chat router for handling chat requests."""
+import asyncio
 import uuid
 from typing import AsyncGenerator, Optional
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import select
 
@@ -14,9 +16,22 @@ from ..schemas import ChatRequest, ChatResponse, ChatMessage, Citation, TokenUsa
 from ..services.ai_provider_service import AIProviderService
 from ..services.chat_service import ChatService
 from ..services.retrieval_service import RetrievalService
+from ..services.guardrail_service import GuardrailService
+from ..services.title_generation_service import TitleGenerationService
 
 router = APIRouter(tags=["Chat"])
 logger = structlog.get_logger()
+
+
+# New efficient chat request schema
+class EfficientChatRequest(BaseModel):
+    """Efficient chat request - only sends new message, server retrieves context."""
+    bot_id: uuid.UUID
+    message: str
+    session_id: Optional[str] = None
+    context_limit: int = 10
+    stream: bool = False
+    metadata: Optional[dict] = None
 
 
 @router.post("/chat/public", response_model=ChatResponse)
@@ -70,6 +85,112 @@ async def chat_public(
         return await _chat_completion_public(request, bot, db)
 
 
+@router.post("/chat/efficient", response_model=ChatResponse)
+async def chat_efficient(
+    request: EfficientChatRequest,
+    db: DatabaseDep,
+):
+    """Efficient chat endpoint - server retrieves conversation context automatically."""
+    # Validate bot exists and get AI provider
+    result = await db.execute(
+        select(Bot)
+        .options(
+            selectinload(Bot.scopes),
+            selectinload(Bot.ai_provider),
+            selectinload(Bot.tenant),
+            selectinload(Bot.datasets)
+        )
+        .where(Bot.id == request.bot_id, Bot.is_active == True)
+    )
+    bot = result.scalar_one_or_none()
+    
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found or not active",
+        )
+    
+    if not bot.ai_provider or not bot.ai_provider.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bot has no active AI provider configured",
+        )
+    
+    # 🚀 Server retrieves conversation context automatically
+    context_messages = await _get_conversation_context(
+        session_id=request.session_id,
+        bot_id=request.bot_id,
+        limit=request.context_limit,
+        db=db
+    )
+    
+    # Add new user message to context
+    context_messages.append(ChatMessage(
+        role="user",
+        content=request.message
+    ))
+    
+    # Validate user query against bot guardrails (using new message)
+    guardrail_service = GuardrailService(db)
+    is_allowed, refusal_message = await guardrail_service.validate_query(
+        bot, request.message
+    )
+    
+    if not is_allowed:
+        # Return refusal message without processing
+        return ChatResponse(
+            message=ChatMessage(role="assistant", content=refusal_message),
+            citations=[],
+            session_id=request.session_id or str(uuid.uuid4()),
+            usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+        )
+    
+    # Get or create conversation for session management
+    conversation = await _get_or_create_conversation(
+        request.session_id, bot, db
+    )
+    
+    # Retrieve relevant context from knowledge base
+    retrieval_service = RetrievalService(db)
+    citations = await retrieval_service.retrieve_context(
+        query=request.message,
+        tenant_id=bot.tenant_id,
+        bot_scopes=bot.scopes,
+        bot_datasets=bot.datasets,
+        limit=5,
+    )
+    
+    # Generate response using AI provider service with full context
+    ai_provider_service = AIProviderService(db)
+    response_message, token_usage = await ai_provider_service.generate_response(
+        bot=bot,
+        messages=context_messages,  # Full context retrieved from database
+        context_citations=citations,
+        metadata=request.metadata,
+    )
+    
+    # Save conversation messages
+    await _save_conversation_messages(
+        conversation, [context_messages[-1]], response_message, citations, token_usage, db, bot
+    )
+    
+    logger.info(
+        "Efficient chat completed",
+        bot_id=bot.id,
+        session_id=conversation.id,
+        context_messages=len(context_messages),
+        new_message_length=len(request.message)
+    )
+    
+    return ChatResponse(
+        session_id=conversation.id,
+        message=response_message,
+        citations=citations,
+        usage=token_usage,
+        metadata=request.metadata or {},
+    )
+
+
 async def _chat_completion_public(
     request: ChatRequest,
     bot: Bot,
@@ -78,6 +199,26 @@ async def _chat_completion_public(
     """Handle non-streaming public chat completion."""
     ai_provider_service = AIProviderService(db)
     retrieval_service = RetrievalService(db)
+    guardrail_service = GuardrailService(db)
+    
+    # Validate user query against bot guardrails
+    if request.messages:
+        last_user_message = next(
+            (msg for msg in reversed(request.messages) if msg.role == "user"),
+            None
+        )
+        if last_user_message:
+            is_allowed, refusal_message = await guardrail_service.validate_query(
+                bot, last_user_message.content
+            )
+            if not is_allowed:
+                # Return refusal message without processing
+                return ChatResponse(
+                    message=ChatMessage(role="assistant", content=refusal_message),
+                    citations=[],
+                    session_id=request.session_id or str(uuid.uuid4()),
+                    usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+                )
     
     # Get or create conversation
     conversation = await _get_or_create_conversation(
@@ -113,7 +254,7 @@ async def _chat_completion_public(
     
     # Save conversation messages
     await _save_conversation_messages(
-        conversation, request.messages, response_message, citations, token_usage, db
+        conversation, request.messages, response_message, citations, token_usage, db, bot
     )
     
     return ChatResponse(
@@ -135,6 +276,24 @@ async def _chat_stream_public(
     
     ai_provider_service = AIProviderService(db)
     retrieval_service = RetrievalService(db)
+    guardrail_service = GuardrailService(db)
+    
+    # Validate user query against bot guardrails
+    if request.messages:
+        last_user_message = next(
+            (msg for msg in reversed(request.messages) if msg.role == "user"),
+            None
+        )
+        if last_user_message:
+            is_allowed, refusal_message = await guardrail_service.validate_query(
+                bot, last_user_message.content
+            )
+            if not is_allowed:
+                # Stream refusal message
+                yield f"data: {json.dumps({'type': 'start', 'session_id': request.session_id or 'temp'})}\n\n"
+                yield f"data: {json.dumps({'type': 'content', 'content': refusal_message})}\n\n"
+                yield f"data: {json.dumps({'type': 'end', 'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}})}\n\n"
+                return
     
     # Get or create conversation
     conversation = await _get_or_create_conversation(
@@ -188,7 +347,7 @@ async def _chat_stream_public(
     
     # Save conversation messages
     await _save_conversation_messages(
-        conversation, request.messages, response_message, citations, token_usage, db
+        conversation, request.messages, response_message, citations, token_usage, db, bot
     )
     
     # Send completion event
@@ -245,6 +404,26 @@ async def _chat_completion(
     """Handle non-streaming chat completion."""
     chat_service = ChatService(db)
     retrieval_service = RetrievalService(db)
+    guardrail_service = GuardrailService(db)
+    
+    # Validate user query against bot guardrails
+    if request.messages:
+        last_user_message = next(
+            (msg for msg in reversed(request.messages) if msg.role == "user"),
+            None
+        )
+        if last_user_message:
+            is_allowed, refusal_message = await guardrail_service.validate_query(
+                bot, last_user_message.content
+            )
+            if not is_allowed:
+                # Return refusal message without processing
+                return ChatResponse(
+                    message=ChatMessage(role="assistant", content=refusal_message),
+                    citations=[],
+                    session_id=request.session_id or str(uuid.uuid4()),
+                    usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+                )
     
     # Get or create conversation
     conversation = await _get_or_create_conversation(
@@ -280,7 +459,7 @@ async def _chat_completion(
     
     # Save conversation messages
     await _save_conversation_messages(
-        conversation, request.messages, response_message, citations, token_usage, db
+        conversation, request.messages, response_message, citations, token_usage, db, bot
     )
     
     return ChatResponse(
@@ -304,6 +483,24 @@ async def _chat_stream(
     
     chat_service = ChatService(db)
     retrieval_service = RetrievalService(db)
+    guardrail_service = GuardrailService(db)
+    
+    # Validate user query against bot guardrails
+    if request.messages:
+        last_user_message = next(
+            (msg for msg in reversed(request.messages) if msg.role == "user"),
+            None
+        )
+        if last_user_message:
+            is_allowed, refusal_message = await guardrail_service.validate_query(
+                bot, last_user_message.content
+            )
+            if not is_allowed:
+                # Stream refusal message
+                yield f"data: {json.dumps({'type': 'start', 'session_id': request.session_id or 'temp'})}\n\n"
+                yield f"data: {json.dumps({'type': 'content', 'content': refusal_message})}\n\n"
+                yield f"data: {json.dumps({'type': 'end', 'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}})}\n\n"
+                return
     
     # Get or create conversation
     conversation = await _get_or_create_conversation(
@@ -358,11 +555,62 @@ async def _chat_stream(
     
     # Save conversation messages
     await _save_conversation_messages(
-        conversation, request.messages, response_message, citations, token_usage, db
+        conversation, request.messages, response_message, citations, token_usage, db, bot
     )
     
     # Send completion event
     yield f"data: {json.dumps({'type': 'done', 'usage': token_usage.dict()})}\n\n"
+
+
+async def _get_conversation_context(
+    session_id: Optional[str],
+    bot_id: uuid.UUID,
+    limit: int,
+    db: DatabaseDep,
+) -> list[ChatMessage]:
+    """Retrieve conversation context from database efficiently."""
+    if not session_id:
+        return []  # New conversation, no context
+    
+    try:
+        # Get recent messages from database
+        result = await db.execute(
+            select(Message)
+            .join(Conversation)
+            .where(
+                Conversation.id == session_id,
+                Conversation.bot_id == bot_id,
+                Conversation.is_active == True
+            )
+            .order_by(Message.sequence_number.desc())
+            .limit(limit * 2)  # Get last N exchanges (user + assistant pairs)
+        )
+        
+        messages = result.scalars().all()
+        
+        # Convert to ChatMessage format in chronological order
+        context_messages = []
+        for msg in reversed(messages):  # Reverse to chronological order
+            context_messages.append(ChatMessage(
+                role=msg.role,
+                content=msg.content
+            ))
+        
+        logger.info(
+            "Retrieved conversation context",
+            session_id=session_id,
+            message_count=len(context_messages)
+        )
+        
+        return context_messages
+        
+    except Exception as e:
+        logger.error(
+            "Failed to retrieve conversation context",
+            session_id=session_id,
+            error=str(e)
+        )
+        return []  # Fallback to empty context
 
 
 async def _get_or_create_conversation(
@@ -405,8 +653,9 @@ async def _save_conversation_messages(
     citations: list[Citation],
     token_usage: TokenUsage,
     db: DatabaseDep,
+    bot: Optional[Bot] = None,
 ) -> None:
-    """Save conversation messages to database."""
+    """Save conversation messages to database and trigger title generation if needed."""
     # Get current message count for sequence numbering
     result = await db.execute(
         select(Message)
@@ -416,6 +665,9 @@ async def _save_conversation_messages(
     )
     last_message = result.scalar_one_or_none()
     next_sequence = (last_message.sequence_number + 1) if last_message else 1
+    
+    # Check if this is the first exchange (for title generation)
+    is_first_exchange = next_sequence == 1
     
     # Save request messages (if not already saved)
     for msg in request_messages:
@@ -442,3 +694,37 @@ async def _save_conversation_messages(
     db.add(response_msg)
     
     await db.commit()
+    
+    # Schedule title generation after first complete exchange (background task)
+    if is_first_exchange and bot and not conversation.title:
+        logger.info("Scheduling title generation for new conversation", 
+                   conversation_id=conversation.id, bot_id=bot.id)
+        
+        # Use asyncio to schedule title generation without blocking
+        asyncio.create_task(_generate_title_background(conversation.id))
+
+
+async def _generate_title_background(conversation_id: str, db_session: DatabaseDep = None) -> None:
+    """Generate conversation title in the background."""
+    try:
+        # Small delay to ensure message commit is fully processed
+        await asyncio.sleep(2)
+        
+        # Create a new database session for the background task
+        from ..deps import get_db
+        async for new_db in get_db():
+            try:
+                title_service = TitleGenerationService(new_db)
+                await title_service.generate_title_for_conversation(conversation_id)
+                
+                logger.info("Background title generation completed", conversation_id=conversation_id)
+                break
+            except Exception as e:
+                logger.error("Background title generation failed in session", 
+                            conversation_id=conversation_id, error=str(e))
+            finally:
+                await new_db.close()
+                
+    except Exception as e:
+        logger.error("Background title generation setup failed", 
+                    conversation_id=conversation_id, error=str(e))

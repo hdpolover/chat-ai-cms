@@ -1,33 +1,37 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { CONFIG } from '@/config';
-import { CircularProgress, Box } from '@mui/material';
+import SSRSafeLoading from '@/components/common/SSRSafeLoading';
+import NoSSR from '@/components/NoSSR';
 
-export default function Home() {
-  const { isAuthenticated, loading } = useAuth();
+function HomeContent() {
+  const { isAuthenticated, loading, mounted } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
+    if (mounted && !loading) {
       if (isAuthenticated) {
         router.push(CONFIG.ROUTES.DASHBOARD);
       } else {
         router.push(CONFIG.ROUTES.LOGIN);
       }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, router, mounted]);
 
+  if (!mounted || loading) {
+    return <SSRSafeLoading />;
+  }
+
+  return <SSRSafeLoading />;
+}
+
+export default function Home() {
   return (
-    <Box
-      display="flex"
-      justifyContent="center"
-      alignItems="center"
-      minHeight="100vh"
-    >
-      <CircularProgress />
-    </Box>
+    <NoSSR fallback={<SSRSafeLoading />}>
+      <HomeContent />
+    </NoSSR>
   );
 }

@@ -59,6 +59,51 @@ export interface Scope {
   updated_at: string;
 }
 
+export interface GuardrailConfig {
+  allowed_topics?: string[];
+  forbidden_topics?: string[];
+  knowledge_boundaries?: {
+    strict_mode?: boolean;
+    allowed_sources?: string[];
+    context_preference?: 'exclusive' | 'supplement' | 'prefer';
+  };
+  response_guidelines?: {
+    max_response_length?: number;
+    require_citations?: boolean;
+    step_by_step?: boolean;
+    mathematical_notation?: boolean;
+  };
+  refusal_message?: string;
+}
+
+export interface Scope {
+  id: string;
+  bot_id: string;
+  name: string;
+  description?: string;
+  dataset_filters?: Record<string, any>;
+  guardrails?: GuardrailConfig;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateScopeRequest {
+  name: string;
+  description?: string;
+  dataset_filters?: Record<string, any>;
+  guardrails?: GuardrailConfig;
+  is_active?: boolean;
+}
+
+export interface UpdateScopeRequest {
+  name?: string;
+  description?: string;
+  dataset_filters?: Record<string, any>;
+  guardrails?: GuardrailConfig;
+  is_active?: boolean;
+}
+
 export interface Bot {
   id: string;
   name: string;
@@ -78,11 +123,18 @@ export interface Bot {
     id: string;
     name: string;
     description?: string;
+    tags?: string[];
+    created_at: string;
+    updated_at: string;
   }>;
   scopes?: Array<{
     id: string;
     name: string;
     description?: string;
+    guardrails?: GuardrailConfig;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
   }>;
   created_at: string;
   updated_at: string;
@@ -179,6 +231,7 @@ export interface CreateBotRequest {
 
 export interface UpdateBotRequest extends Partial<CreateBotRequest> {
   is_active?: boolean;
+  scope_ids?: string[];
 }
 
 export interface CreateChatRequest {
@@ -192,3 +245,15 @@ export interface SendMessageRequest {
   message: string;
   metadata?: Record<string, any>;
 }
+
+export interface CreateScopeRequest {
+  name: string;
+  description?: string;
+  dataset_filters?: Record<string, any>;
+  guardrails?: GuardrailConfig;
+  is_active?: boolean;
+}
+
+export interface UpdateScopeRequest extends Partial<CreateScopeRequest> {}
+
+export interface ScopeResponse extends Scope {}

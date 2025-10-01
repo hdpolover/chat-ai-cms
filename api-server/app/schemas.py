@@ -142,6 +142,7 @@ class BotUpdate(BaseSchema):
     is_public: Optional[bool] = None
     allowed_domains: Optional[List[str]] = None
     dataset_ids: Optional[List[str]] = Field(None, description="Dataset IDs to assign to the bot")
+    scope_ids: Optional[List[str]] = Field(None, description="Scope IDs to assign to the bot (replaces existing scopes)")
 
 
 class BotResponse(BotBase):
@@ -156,6 +157,88 @@ class BotResponse(BotBase):
     ai_provider_name: Optional[str] = None
     scopes: List[Dict[str, Any]] = Field(default_factory=list)
     datasets: List[Dict[str, Any]] = Field(default_factory=list, description="Assigned datasets")
+
+
+# Scope schemas
+class GuardrailConfig(BaseSchema):
+    """Guardrail configuration schema."""
+    allowed_topics: List[str] = Field(default_factory=list, description="Topics the bot is allowed to discuss")
+    forbidden_topics: List[str] = Field(default_factory=list, description="Topics the bot should not discuss")
+    knowledge_boundaries: Dict[str, Any] = Field(default_factory=dict, description="Knowledge boundary settings")
+    response_guidelines: Dict[str, Any] = Field(default_factory=dict, description="Response formatting guidelines")
+    refusal_message: Optional[str] = Field(None, description="Custom message when refusing queries")
+
+
+class ScopeBase(BaseSchema):
+    """Base scope schema."""
+    name: str = Field(..., max_length=255)
+    description: Optional[str] = None
+    dataset_filters: Dict[str, Any] = Field(default_factory=dict)
+    guardrails: GuardrailConfig = Field(default_factory=GuardrailConfig)
+    is_active: bool = Field(True)
+
+
+class ScopeCreate(ScopeBase):
+    """Scope creation schema."""
+    bot_id: str = Field(..., description="Bot ID this scope belongs to")
+
+
+class ScopeUpdate(BaseSchema):
+    """Scope update schema."""
+    name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    dataset_filters: Optional[Dict[str, Any]] = None
+    guardrails: Optional[GuardrailConfig] = None
+    is_active: Optional[bool] = None
+
+
+class ScopeResponse(ScopeBase):
+    """Scope response schema."""
+    id: str
+    bot_id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+# Scope schemas
+class GuardrailConfigSchema(BaseSchema):
+    """Guardrail configuration schema."""
+    allowed_topics: List[str] = Field(default_factory=list)
+    forbidden_topics: List[str] = Field(default_factory=list)
+    knowledge_boundaries: Dict[str, Any] = Field(default_factory=dict)
+    response_guidelines: Dict[str, Any] = Field(default_factory=dict)
+    refusal_message: Optional[str] = None
+
+
+class ScopeBase(BaseSchema):
+    """Base scope schema."""
+    name: str = Field(..., max_length=255)
+    description: Optional[str] = None
+    dataset_filters: Dict[str, Any] = Field(default_factory=dict)
+    guardrails: Optional[GuardrailConfigSchema] = None
+    is_active: bool = Field(True)
+
+
+class ScopeCreate(ScopeBase):
+    """Scope creation schema."""
+    pass
+
+
+class ScopeUpdate(BaseSchema):
+    """Scope update schema."""
+    name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    dataset_filters: Optional[Dict[str, Any]] = None
+    guardrails: Optional[GuardrailConfigSchema] = None
+    is_active: Optional[bool] = None
+
+
+class ScopeResponse(ScopeBase):
+    """Scope response schema."""
+    id: str
+    bot_id: str
+    created_at: datetime
+    updated_at: datetime
 
 
 # BotDataset schemas
@@ -400,3 +483,44 @@ class PaginatedResponse(BaseSchema):
     pages: int = Field(..., description="Total number of pages")
     has_next: bool = Field(..., description="Whether there are more pages")
     has_prev: bool = Field(..., description="Whether there are previous pages")
+
+
+# Scope schemas
+class GuardrailConfig(BaseSchema):
+    """Guardrail configuration schema."""
+    allowed_topics: Optional[List[str]] = Field(None, description="List of allowed topics")
+    forbidden_topics: Optional[List[str]] = Field(None, description="List of forbidden topics")
+    knowledge_boundaries: Optional[Dict[str, Any]] = Field(None, description="Knowledge boundary settings")
+    response_guidelines: Optional[Dict[str, Any]] = Field(None, description="Response formatting guidelines")
+    refusal_message: Optional[str] = Field(None, description="Custom refusal message")
+
+
+class ScopeBase(BaseSchema):
+    """Base scope schema."""
+    name: str = Field(..., description="Scope name", max_length=255)
+    description: Optional[str] = Field(None, description="Scope description")
+    dataset_filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dataset filtering rules")
+    guardrails: Optional[GuardrailConfig] = Field(None, description="Guardrail configuration")
+    is_active: bool = Field(True, description="Whether the scope is active")
+
+
+class ScopeCreate(ScopeBase):
+    """Schema for creating a new scope."""
+    pass
+
+
+class ScopeUpdate(BaseSchema):
+    """Schema for updating a scope."""
+    name: Optional[str] = Field(None, description="Scope name", max_length=255)
+    description: Optional[str] = Field(None, description="Scope description")
+    dataset_filters: Optional[Dict[str, Any]] = Field(None, description="Dataset filtering rules")
+    guardrails: Optional[GuardrailConfig] = Field(None, description="Guardrail configuration")
+    is_active: Optional[bool] = Field(None, description="Whether the scope is active")
+
+
+class ScopeResponse(ScopeBase):
+    """Schema for scope responses."""
+    id: str = Field(..., description="Scope ID")
+    bot_id: str = Field(..., description="Bot ID this scope belongs to")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
