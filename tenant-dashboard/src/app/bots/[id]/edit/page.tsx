@@ -51,9 +51,10 @@ import {
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import TenantLayout from '@/components/layout/TenantLayout';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
+import ScopeConfiguration from '@/components/bots/ScopeConfiguration';
 import { BotService } from '@/services/bot';
 import { DatasetService, Dataset } from '@/services/dataset';
-import { Bot, UpdateBotRequest, TenantAIProvider } from '@/types';
+import { Bot, UpdateBotRequest, TenantAIProvider, GuardrailConfig } from '@/types';
 
 const steps = [
   'Basic Information',
@@ -102,9 +103,6 @@ export default function EditBotPage() {
   const [availableDatasets, setAvailableDatasets] = useState<Dataset[]>([]);
   const [availableScopes, setAvailableScopes] = useState<any[]>([]);
   const [customScopes, setCustomScopes] = useState<any[]>([]);
-  const [showCustomScopeForm, setShowCustomScopeForm] = useState(false);
-  const [customScopeName, setCustomScopeName] = useState('');
-  const [customScopeDescription, setCustomScopeDescription] = useState('');
   
   // Form data
   const [botData, setBotData] = useState<UpdateBotRequest & { 
@@ -389,34 +387,27 @@ export default function EditBotPage() {
     setBotData({ ...botData, scope_ids: newScopes });
   };
 
-  const handleAddCustomScope = () => {
-    if (!customScopeName.trim()) return;
+  const handleAddCustomScope = (scope: {
+    name: string;
+    description: string;
+    guardrails?: GuardrailConfig;
+    dataset_filters?: Record<string, any>;
+  }) => {
+    if (!scope.name.trim()) return;
     
     const newCustomScope = {
-      id: `custom_${Date.now()}_${customScopeName.toLowerCase().replace(/\s+/g, '_')}`,
-      name: customScopeName,
-      description: customScopeDescription || `Custom scope: ${customScopeName}`,
+      id: `custom_${Date.now()}_${scope.name.toLowerCase().replace(/\s+/g, '_')}`,
+      name: scope.name,
+      description: scope.description || `Custom scope: ${scope.name}`,
       category: 'Custom',
+      guardrails: scope.guardrails,
+      dataset_filters: scope.dataset_filters,
       is_active: true,
       template: false,
       custom: true,
-      config: {
-        name: customScopeName.toLowerCase().replace(/\s+/g, '_'),
-        description: customScopeDescription || `Custom scope: ${customScopeName}`,
-        guardrails: {
-          response_guidelines: {
-            max_response_length: 400,
-            require_citations: true
-          }
-        },
-        is_active: true
-      }
     };
     
     setCustomScopes(prev => [...prev, newCustomScope]);
-    setCustomScopeName('');
-    setCustomScopeDescription('');
-    setShowCustomScopeForm(false);
     
     // Automatically select the new custom scope
     handleScopeToggle(newCustomScope.id);
@@ -764,139 +755,24 @@ export default function EditBotPage() {
                     </TabPanel>
 
                     <TabPanel value={activeTab} index={1}>
-                      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                        Configure access scopes to control what the bot can access and do
-                      </Typography>
-                      
-                      {availableScopes.length === 0 ? (
-                        <Paper sx={{ p: 3, textAlign: 'center' }}>
-                          <Typography variant="body1" color="text.secondary">
-                            Loading available scopes...
-                          </Typography>
-                          <CircularProgress size={24} sx={{ mt: 2 }} />
-                        </Paper>
-                      ) : (
-                        <Box>
-                          <Box sx={{ mb: 3 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                Select scope templates or create custom scopes to control bot behavior:
-                              </Typography>
-                              <Button
-                                variant="outlined" 
-                                size="small"
-                                onClick={() => setShowCustomScopeForm(true)}
-                                sx={{ ml: 2 }}
-                              >
-                                Add Custom Scope
-                              </Button>
-                            </Box>
-                            
-                            {showCustomScopeForm && (
-                              <Paper sx={{ p: 3, mb: 3, border: 1, borderColor: 'primary.main' }}>
-                                <Typography variant="h6" sx={{ mb: 2 }}>Create Custom Scope</Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                  <TextField
-                                    label="Scope Name"
-                                    value={customScopeName}
-                                    onChange={(e) => setCustomScopeName(e.target.value)}
-                                    placeholder="e.g., HR Assistant, Legal Support"
-                                    required
-                                  />
-                                  <TextField
-                                    label="Description"
-                                    value={customScopeDescription}
-                                    onChange={(e) => setCustomScopeDescription(e.target.value)}
-                                    placeholder="Describe what this scope does..."
-                                    multiline
-                                    rows={2}
-                                  />
-                                  <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button
-                                      variant="contained"
-                                      onClick={handleAddCustomScope}
-                                      disabled={!customScopeName.trim()}
-                                    >
-                                      Create Scope
-                                    </Button>
-                                    <Button
-                                      variant="outlined"
-                                      onClick={() => {
-                                        setShowCustomScopeForm(false);
-                                        setCustomScopeName('');
-                                        setCustomScopeDescription('');
-                                      }}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </Box>
-                                </Box>
-                              </Paper>
-                            )}
-                          </Box>
-                          
-                          <List>
-                            {[...availableScopes, ...customScopes].map((scope) => (
-                              <ListItem key={scope.id} sx={{ border: 1, borderColor: 'divider', mb: 1, borderRadius: 1 }}>
-                                <ListItemIcon>
-                                  <Checkbox
-                                    checked={botData.scope_ids?.includes(scope.id) || false}
-                                    onChange={() => {
-                                      console.log('Checkbox clicked for scope:', scope.id);
-                                      handleScopeToggle(scope.id);
-                                    }}
-                                  />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <Typography variant="subtitle2">{scope.name}</Typography>
-                                      {scope.category && (
-                                        <Chip 
-                                          label={scope.category} 
-                                          size="small" 
-                                          variant="outlined"
-                                          color="primary"
-                                        />
-                                      )}
-                                    </Box>
-                                  }
-                                  secondary={
-                                    <Box>
-                                      <Typography variant="body2" color="text.secondary">
-                                        {scope.description || 'No description'}
-                                      </Typography>
-                                      {scope.existing && (
-                                        <Typography variant="caption" color="success.main">
-                                          Existing Scope - Already configured for this bot
-                                        </Typography>
-                                      )}
-                                      {scope.template && (
-                                        <Typography variant="caption" color="primary">
-                                          Template - Will be created when bot is saved
-                                        </Typography>
-                                      )}
-                                      {scope.custom && (
-                                        <Typography variant="caption" color="secondary">
-                                          Custom Scope
-                                        </Typography>
-                                      )}
-                                    </Box>
-                                  }
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                          
-                          {botData.scope_ids && botData.scope_ids.length > 0 && (
-                            <Alert severity="info" sx={{ mt: 2 }}>
-                              <Typography variant="body2">
-                                {botData.scope_ids.length} scope(s) selected. These will be applied to restrict the bot's behavior according to the selected templates.
-                              </Typography>
-                            </Alert>
-                          )}
-                        </Box>
-                      )}
+                      <ScopeConfiguration
+                        selectedScopeIds={botData.scope_ids || []}
+                        availableScopes={[...availableScopes, ...customScopes]}
+                        availableDatasets={availableDatasets}
+                        onScopeSelection={(scopeIds) => setBotData({ ...botData, scope_ids: scopeIds })}
+                        onCreateScope={handleAddCustomScope}
+                        onUpdateScope={(scopeId, updates) => {
+                          // Update the scope in customScopes or availableScopes
+                          const updatedCustomScopes = customScopes.map(scope => 
+                            scope.id === scopeId 
+                              ? { ...scope, guardrails: updates.guardrails, dataset_filters: updates.dataset_filters }
+                              : scope
+                          );
+                          setCustomScopes(updatedCustomScopes);
+                          console.log('Scope updated:', scopeId, updates);
+                        }}
+                        readOnly={false}
+                      />
                     </TabPanel>
                   </Box>
                 )}

@@ -159,64 +159,48 @@ class BotResponse(BotBase):
     datasets: List[Dict[str, Any]] = Field(default_factory=list, description="Assigned datasets")
 
 
-# Scope schemas
+# Scope and Guardrail schemas
+class KnowledgeBoundaries(BaseSchema):
+    """Knowledge boundary configuration schema."""
+    strict_mode: Optional[bool] = Field(False, description="Only use provided context, no general knowledge")
+    allowed_sources: Optional[List[str]] = Field(default_factory=list, description="Allowed knowledge sources")
+    context_preference: Optional[str] = Field("supplement", description="How to use context: exclusive, prefer, supplement")
+
+
+class ResponseGuidelines(BaseSchema):
+    """Response formatting guidelines schema."""
+    max_response_length: Optional[int] = Field(500, description="Maximum response length in characters")
+    require_citations: Optional[bool] = Field(False, description="Always cite sources when using context")
+    step_by_step: Optional[bool] = Field(False, description="Provide step-by-step explanations")
+    mathematical_notation: Optional[bool] = Field(False, description="Use proper mathematical notation")
+
+
 class GuardrailConfig(BaseSchema):
-    """Guardrail configuration schema."""
-    allowed_topics: List[str] = Field(default_factory=list, description="Topics the bot is allowed to discuss")
-    forbidden_topics: List[str] = Field(default_factory=list, description="Topics the bot should not discuss")
-    knowledge_boundaries: Dict[str, Any] = Field(default_factory=dict, description="Knowledge boundary settings")
-    response_guidelines: Dict[str, Any] = Field(default_factory=dict, description="Response formatting guidelines")
+    """Comprehensive guardrail configuration schema."""
+    allowed_topics: Optional[List[str]] = Field(default_factory=list, description="Topics the bot is allowed to discuss")
+    forbidden_topics: Optional[List[str]] = Field(default_factory=list, description="Topics the bot should not discuss")
+    knowledge_boundaries: Optional[KnowledgeBoundaries] = Field(default_factory=KnowledgeBoundaries, description="Knowledge boundary settings")
+    response_guidelines: Optional[ResponseGuidelines] = Field(default_factory=ResponseGuidelines, description="Response formatting guidelines")
     refusal_message: Optional[str] = Field(None, description="Custom message when refusing queries")
 
 
-class ScopeBase(BaseSchema):
-    """Base scope schema."""
-    name: str = Field(..., max_length=255)
-    description: Optional[str] = None
-    dataset_filters: Dict[str, Any] = Field(default_factory=dict)
-    guardrails: GuardrailConfig = Field(default_factory=GuardrailConfig)
-    is_active: bool = Field(True)
-
-
-class ScopeCreate(ScopeBase):
-    """Scope creation schema."""
-    bot_id: str = Field(..., description="Bot ID this scope belongs to")
-
-
-class ScopeUpdate(BaseSchema):
-    """Scope update schema."""
-    name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
-    dataset_filters: Optional[Dict[str, Any]] = None
-    guardrails: Optional[GuardrailConfig] = None
-    is_active: Optional[bool] = None
-
-
-class ScopeResponse(ScopeBase):
-    """Scope response schema."""
-    id: str
-    bot_id: str
-    created_at: datetime
-    updated_at: datetime
-
-
-# Scope schemas
-class GuardrailConfigSchema(BaseSchema):
-    """Guardrail configuration schema."""
-    allowed_topics: List[str] = Field(default_factory=list)
-    forbidden_topics: List[str] = Field(default_factory=list)
-    knowledge_boundaries: Dict[str, Any] = Field(default_factory=dict)
-    response_guidelines: Dict[str, Any] = Field(default_factory=dict)
-    refusal_message: Optional[str] = None
+class DatasetFilters(BaseSchema):
+    """Dataset filter configuration schema."""
+    tags: Optional[List[str]] = Field(default_factory=list, description="Filter by dataset tags")
+    categories: Optional[List[str]] = Field(default_factory=list, description="Filter by dataset categories")
+    metadata_filters: Optional[Dict[str, str]] = Field(default_factory=dict, description="Custom metadata filters")
+    include_patterns: Optional[List[str]] = Field(default_factory=list, description="Include file patterns")
+    exclude_patterns: Optional[List[str]] = Field(default_factory=list, description="Exclude file patterns")
+    source_priorities: Optional[Dict[str, int]] = Field(default_factory=dict, description="Source priority weights")
 
 
 class ScopeBase(BaseSchema):
     """Base scope schema."""
-    name: str = Field(..., max_length=255)
-    description: Optional[str] = None
-    dataset_filters: Dict[str, Any] = Field(default_factory=dict)
-    guardrails: Optional[GuardrailConfigSchema] = None
-    is_active: bool = Field(True)
+    name: str = Field(..., max_length=255, description="Scope name")
+    description: Optional[str] = Field(None, description="Scope description")
+    dataset_filters: Optional[DatasetFilters] = Field(default_factory=DatasetFilters, description="Dataset filtering rules")
+    guardrails: Optional[GuardrailConfig] = Field(default_factory=GuardrailConfig, description="Guardrail configuration")
+    is_active: bool = Field(True, description="Whether the scope is active")
 
 
 class ScopeCreate(ScopeBase):
@@ -226,11 +210,11 @@ class ScopeCreate(ScopeBase):
 
 class ScopeUpdate(BaseSchema):
     """Scope update schema."""
-    name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
-    dataset_filters: Optional[Dict[str, Any]] = None
-    guardrails: Optional[GuardrailConfigSchema] = None
-    is_active: Optional[bool] = None
+    name: Optional[str] = Field(None, max_length=255, description="Scope name")
+    description: Optional[str] = Field(None, description="Scope description")
+    dataset_filters: Optional[DatasetFilters] = Field(None, description="Dataset filtering rules")
+    guardrails: Optional[GuardrailConfig] = Field(None, description="Guardrail configuration")
+    is_active: Optional[bool] = Field(None, description="Whether the scope is active")
 
 
 class ScopeResponse(ScopeBase):

@@ -72,7 +72,80 @@ export class ScopeService {
   }
 
   /**
-   * Get predefined scope templates for common use cases
+   * Batch create multiple scopes for a bot
+   */
+  static async createBotScopes(
+    botId: string, 
+    scopes: CreateScopeRequest[]
+  ): Promise<ScopeResponse[]> {
+    try {
+      const createdScopes = [];
+      for (const scope of scopes) {
+        const created = await this.createBotScope(botId, scope);
+        createdScopes.push(created);
+      }
+      return createdScopes;
+    } catch (error) {
+      console.error('Failed to create bot scopes in batch:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Batch update multiple scopes for a bot
+   */
+  static async updateBotScopes(
+    botId: string, 
+    updates: Array<{ scopeId: string; data: UpdateScopeRequest }>
+  ): Promise<ScopeResponse[]> {
+    try {
+      const updatedScopes = [];
+      for (const update of updates) {
+        const updated = await this.updateBotScope(botId, update.scopeId, update.data);
+        updatedScopes.push(updated);
+      }
+      return updatedScopes;
+    } catch (error) {
+      console.error('Failed to update bot scopes in batch:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create scope from template
+   */
+  static async createScopeFromTemplate(
+    botId: string, 
+    templateName: string,
+    customizations?: Partial<CreateScopeRequest>
+  ): Promise<ScopeResponse> {
+    try {
+      const templates = this.getScopeTemplates();
+      const template = templates.find(t => t.config.name === templateName);
+      
+      if (!template) {
+        throw new Error(`Template ${templateName} not found`);
+      }
+
+      const scopeData = {
+        ...template.config,
+        ...customizations,
+        // Ensure guardrails are properly merged
+        guardrails: {
+          ...template.config.guardrails,
+          ...customizations?.guardrails,
+        },
+      };
+
+      return await this.createBotScope(botId, scopeData);
+    } catch (error) {
+      console.error('Failed to create scope from template:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get enhanced scope templates with better organization and dataset filters
    */
   static getScopeTemplates(): Array<{
     name: string;
@@ -88,6 +161,12 @@ export class ScopeService {
         config: {
           name: 'customer_support_agent',
           description: 'Professional customer support assistant for handling user inquiries',
+          dataset_filters: {
+            tags: ['support', 'faq', 'documentation', 'policies'],
+            categories: ['customer_service', 'troubleshooting'],
+            include_patterns: ['*support*', '*faq*', '*help*', '*guide*'],
+            exclude_patterns: ['*internal*', '*confidential*', '*employee*']
+          },
           guardrails: {
             allowed_topics: [
               'product information', 'troubleshooting', 'account help', 'billing questions',
@@ -120,6 +199,12 @@ export class ScopeService {
         config: {
           name: 'sales_assistant',
           description: 'Friendly sales assistant for product recommendations and inquiries',
+          dataset_filters: {
+            tags: ['sales', 'products', 'pricing', 'features', 'benefits'],
+            categories: ['sales_materials', 'product_catalog', 'testimonials'],
+            include_patterns: ['*product*', '*price*', '*feature*', '*benefit*', '*testimonial*'],
+            exclude_patterns: ['*internal_cost*', '*competitor*', '*confidential*']
+          },
           guardrails: {
             allowed_topics: [
               'product features', 'pricing information', 'product comparisons',
@@ -152,6 +237,12 @@ export class ScopeService {
         config: {
           name: 'event_admin_assistant',
           description: 'Organized assistant for event management and attendee support',
+          dataset_filters: {
+            tags: ['events', 'schedule', 'venue', 'logistics'],
+            categories: ['event_management', 'attendee_support'],
+            include_patterns: ['*event*', '*schedule*', '*venue*', '*agenda*'],
+            exclude_patterns: ['*personal*', '*payment*', '*internal*']
+          },
           guardrails: {
             allowed_topics: [
               'event schedule', 'registration information', 'venue details', 'speaker information',
@@ -184,6 +275,12 @@ export class ScopeService {
         config: {
           name: 'product_expert',
           description: 'Technical expert for detailed product information and guidance',
+          dataset_filters: {
+            tags: ['technical', 'specifications', 'documentation', 'guides'],
+            categories: ['technical_docs', 'user_manuals', 'specifications'],
+            include_patterns: ['*technical*', '*spec*', '*manual*', '*guide*'],
+            exclude_patterns: ['*unreleased*', '*internal*', '*confidential*']
+          },
           guardrails: {
             allowed_topics: [
               'technical specifications', 'product features', 'compatibility information',
@@ -217,6 +314,12 @@ export class ScopeService {
         config: {
           name: 'program_coordinator',
           description: 'Helpful coordinator for program information and participant support',
+          dataset_filters: {
+            tags: ['education', 'program', 'curriculum', 'requirements'],
+            categories: ['educational_programs', 'curriculum', 'student_resources'],
+            include_patterns: ['*program*', '*curriculum*', '*course*', '*requirement*'],
+            exclude_patterns: ['*grade*', '*personal*', '*internal*', '*confidential*']
+          },
           guardrails: {
             allowed_topics: [
               'program requirements', 'curriculum information', 'schedule details',
@@ -244,6 +347,103 @@ export class ScopeService {
         }
       }
     ];
+  }
+
+  /**
+   * Validate scope configuration for completeness and consistency
+   */
+  static validateScopeConfig(config: CreateScopeRequest | UpdateScopeRequest): {
+    isValid: boolean;
+    warnings: string[];
+    errors: string[];
+  } {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // Check basic requirements
+    if ('name' in config && (!config.name || config.name.trim().length === 0)) {
+      errors.push('Scope name is required');
+    }
+
+    // Validate guardrails
+    if (config.guardrails) {
+      const { guardrails } = config;
+      
+      // Check for conflicts between allowed and forbidden topics
+      if (guardrails.allowed_topics && guardrails.forbidden_topics) {
+        const conflicts = guardrails.allowed_topics.filter(topic => 
+          guardrails.forbidden_topics?.some(forbidden => 
+            topic.toLowerCase().includes(forbidden.toLowerCase()) ||
+            forbidden.toLowerCase().includes(topic.toLowerCase())
+          )
+        );
+        
+        if (conflicts.length > 0) {
+          warnings.push(`Potential conflicts between allowed and forbidden topics: ${conflicts.join(', ')}`);
+        }
+      }
+
+      // Check response length limits
+      if (guardrails.response_guidelines?.max_response_length) {
+        const maxLength = guardrails.response_guidelines.max_response_length;
+        if (maxLength < 50) {
+          warnings.push('Very short response limit may result in incomplete answers');
+        }
+        if (maxLength > 2000) {
+          warnings.push('Very long response limit may result in verbose answers');
+        }
+      }
+
+      // Check knowledge boundary consistency
+      if (guardrails.knowledge_boundaries?.strict_mode && 
+          !guardrails.knowledge_boundaries?.allowed_sources?.length) {
+        warnings.push('Strict mode enabled but no allowed sources specified');
+      }
+    }
+
+    // Validate dataset filters
+    if (config.dataset_filters) {
+      const dataset_filters = config.dataset_filters;
+      
+      if (dataset_filters.include_patterns?.length && dataset_filters.exclude_patterns?.length) {
+        // Check for pattern conflicts
+        const conflictingPatterns = dataset_filters.include_patterns.filter((include: string) =>
+          dataset_filters.exclude_patterns?.some((exclude: string) => 
+            include === exclude || 
+            (include.includes('*') && exclude.includes('*') && 
+             include.replace(/\*/g, '') === exclude.replace(/\*/g, ''))
+          )
+        );
+        
+        if (conflictingPatterns.length > 0) {
+          warnings.push(`Conflicting include/exclude patterns: ${conflictingPatterns.join(', ')}`);
+        }
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      warnings,
+      errors
+    };
+  }
+
+  /**
+   * Get scope usage analytics (placeholder for future implementation)
+   */
+  static async getScopeAnalytics(_botId: string, _scopeId: string): Promise<{
+    usage_count: number;
+    success_rate: number;
+    common_queries: string[];
+    blocked_queries: string[];
+  }> {
+    // This would be implemented with actual analytics data in the future
+    return {
+      usage_count: 0,
+      success_rate: 0.95,
+      common_queries: [],
+      blocked_queries: []
+    };
   }
 }
 
