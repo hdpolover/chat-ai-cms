@@ -66,6 +66,17 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             )}
           </CardContent>
         </Card>
+
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Guardrails & Filters</Typography>
+            <Typography><strong>Allowed Topics:</strong> {botData.guardrails?.allowed_topics?.length || 0} configured</Typography>
+            <Typography><strong>Forbidden Topics:</strong> {botData.guardrails?.forbidden_topics?.length || 0} configured</Typography>
+            <Typography><strong>Strict Mode:</strong> {botData.guardrails?.knowledge_boundaries?.strict_mode ? 'Enabled' : 'Disabled'}</Typography>
+            <Typography><strong>Dataset Filter Tags:</strong> {botData.dataset_filters?.tags?.length || 0} configured</Typography>
+            <Typography><strong>Dataset Filter Categories:</strong> {botData.dataset_filters?.categories?.length || 0} configured</Typography>
+          </CardContent>
+        </Card>
       </Box>
     </Box>
   );

@@ -126,6 +126,8 @@ class BotCreate(BotBase):
     is_public: bool = Field(False, description="Whether the bot is public")
     allowed_domains: List[str] = Field(default_factory=list, description="Allowed domains for public bots")
     dataset_ids: List[str] = Field(default_factory=list, description="Dataset IDs to assign to the bot")
+    guardrails: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Guardrail configuration")
+    dataset_filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dataset filtering rules")
 
 
 class BotUpdate(BaseSchema):
@@ -143,6 +145,8 @@ class BotUpdate(BaseSchema):
     allowed_domains: Optional[List[str]] = None
     dataset_ids: Optional[List[str]] = Field(None, description="Dataset IDs to assign to the bot")
     scope_ids: Optional[List[str]] = Field(None, description="Scope IDs to assign to the bot (replaces existing scopes)")
+    guardrails: Optional[Dict[str, Any]] = Field(None, description="Guardrail configuration")
+    dataset_filters: Optional[Dict[str, Any]] = Field(None, description="Dataset filtering rules")
 
 
 class BotResponse(BotBase):
@@ -157,6 +161,8 @@ class BotResponse(BotBase):
     ai_provider_name: Optional[str] = None
     scopes: List[Dict[str, Any]] = Field(default_factory=list)
     datasets: List[Dict[str, Any]] = Field(default_factory=list, description="Assigned datasets")
+    guardrails: Dict[str, Any] = Field(default_factory=dict, description="Guardrail configuration")
+    dataset_filters: Dict[str, Any] = Field(default_factory=dict, description="Dataset filtering rules")
 
 
 # Scope and Guardrail schemas

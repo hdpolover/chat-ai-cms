@@ -16,7 +16,9 @@ import {
   BasicInfoStep,
   AIConfigStep,
   KnowledgeStep,
+  GuardrailsStep,
   AccessSecurityStep,
+  AdvancedConfigStep,
   ReviewStep,
   CreateBotNavigation,
 } from '@/components/bots/create';
@@ -24,9 +26,11 @@ import { useCreateBot } from '@/hooks/useCreateBot';
 
 const STEPS = [
   'Basic Information',
-  'AI Configuration',
+  'AI Configuration', 
   'Knowledge & Datasets',
+  'Guardrails & Filters',
   'Access & Security',
+  'Advanced Configuration',
   'Review & Create'
 ];
 
@@ -59,10 +63,14 @@ export default function CreateBotPage() {
       case 1:
         return botData.tenant_ai_provider_id !== '' && botData.model !== '';
       case 2:
-        return true; // Optional step
+        return true; // Knowledge & Datasets - Optional step
       case 3:
-        return true; // Optional step
+        return true; // Guardrails & Filters - Optional step
       case 4:
+        return true; // Access & Security - Optional step
+      case 5:
+        return true; // Advanced Configuration - Optional step
+      case 6:
         return Boolean(botData.name && botData.tenant_ai_provider_id && botData.model);
       default:
         return false;
@@ -91,8 +99,25 @@ export default function CreateBotPage() {
           />
         );
       case 3:
-        return <AccessSecurityStep botData={botData} onChange={updateBotData} />;
+        return (
+          <GuardrailsStep 
+            botData={botData}
+            availableDatasets={availableDatasets}
+            onChange={updateBotData}
+          />
+        );
       case 4:
+        return <AccessSecurityStep botData={botData} onChange={updateBotData} />;
+      case 5:
+        return (
+          <AdvancedConfigStep 
+            botData={botData}
+            availableDatasets={availableDatasets}
+            availableScopes={availableScopes}
+            onChange={updateBotData}
+          />
+        );
+      case 6:
         return <ReviewStep botData={botData} aiProviders={aiProviders} />;
       default:
         return null;

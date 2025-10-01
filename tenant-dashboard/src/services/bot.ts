@@ -76,8 +76,17 @@ export class BotService {
   static async deleteBot(botId: string): Promise<void> {
     try {
       await apiClient.delete(CONFIG.API.TENANT_BOT_BY_ID(botId));
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Failed to delete bot ${botId}:`, error);
+      
+      // Re-throw with enhanced error information
+      if (error.response?.status === 400 && error.response?.data?.detail) {
+        const enhancedError = new Error(error.response.data.detail);
+        (enhancedError as any).status = 400;
+        (enhancedError as any).response = error.response;
+        throw enhancedError;
+      }
+      
       throw error;
     }
   }
@@ -181,6 +190,21 @@ export class BotService {
     } catch (error) {
       console.error('Failed to fetch bot conversations:', error);
       return [];
+    }
+  }
+
+  // Check if bot can be safely deleted (no conversations)
+  static async canDeleteBot(botId: string): Promise<{ canDelete: boolean; conversationCount: number }> {
+    try {
+      const conversations = await this.getBotConversations(botId);
+      return {
+        canDelete: conversations.length === 0,
+        conversationCount: conversations.length
+      };
+    } catch (error) {
+      console.error('Failed to check bot delete status:', error);
+      // If we can't check, assume it might have conversations
+      return { canDelete: false, conversationCount: 0 };
     }
   }
 

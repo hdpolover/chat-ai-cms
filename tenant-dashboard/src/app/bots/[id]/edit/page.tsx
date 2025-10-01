@@ -9,12 +9,12 @@ import {
   Stack,
 } from '@mui/material';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import TenantLayout from '@/components/layout/TenantLayout';
 import { useBotEdit } from '@/hooks/useBotEdit';
 import { 
   BotEditHeader,
-  BasicInfoEditCard,
-  AIConfigEditCard,
-  SettingsEditCard
+  CombinedBasicEditCard,
+  CombinedAdvancedEditCard
 } from '@/components/bots/edit';
 
 export default function BotEditPage() {
@@ -45,6 +45,16 @@ export default function BotEditPage() {
     router.push(`/bots/${botId}/datasets`);
   };
 
+  const handleGuardrailsFieldChange = (field: string, value: any) => {
+    // Type-safe wrapper for guardrails and advanced config
+    handleFieldChange(field as any, value);
+  };
+
+  const handleBasicFieldChange = (field: string, value: any) => {
+    // Type-safe wrapper for basic configuration
+    handleFieldChange(field as any, value);
+  };
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -69,36 +79,31 @@ export default function BotEditPage() {
 
   return (
     <ProtectedRoute>
-      <Box sx={{ p: 3 }}>
-        <BotEditHeader
-          bot={bot}
-          saving={saving}
-          onSave={handleSave}
-          onCancel={handleCancel}
-        />
+      <TenantLayout>
+        <Box sx={{ p: 3 }}>
+          <BotEditHeader
+            bot={bot}
+            saving={saving}
+            onSave={handleSave}
+            onCancel={handleCancel}
+          />
 
-        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' } }}>
-          {/* Left Column */}
-          <Stack spacing={3}>
-            <BasicInfoEditCard
+          <Stack spacing={3} sx={{ maxWidth: '1200px', mx: 'auto' }}>
+            {/* Basic Configuration */}
+            <CombinedBasicEditCard
               botData={botData}
               aiProviders={aiProviders}
-              onFieldChange={handleFieldChange}
+              onFieldChange={handleBasicFieldChange}
             />
-            <AIConfigEditCard
+            
+            {/* Advanced Configuration */}
+            <CombinedAdvancedEditCard
               botData={botData}
-              onFieldChange={handleFieldChange}
+              availableDatasets={datasets}
+              availableScopes={[]}
+              onFieldChange={handleGuardrailsFieldChange}
             />
           </Stack>
-
-          {/* Right Column */}
-          <Stack spacing={3}>
-            <SettingsEditCard
-              botData={botData}
-              onFieldChange={handleFieldChange}
-            />
-          </Stack>
-        </Box>
 
         {/* Success Snackbar */}
         <Snackbar
@@ -121,7 +126,8 @@ export default function BotEditPage() {
             {error}
           </Alert>
         </Snackbar>
-      </Box>
+        </Box>
+      </TenantLayout>
     </ProtectedRoute>
   );
 }

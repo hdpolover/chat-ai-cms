@@ -259,14 +259,16 @@ class ChatService:
             
             # Check if query matches any allowed topics
             for scope in scopes:
-                # Check allowed topics
-                allowed_topics = scope.allowed_topics or []
+                guardrails = scope.guardrails or {}
+                
+                # Check allowed topics from guardrails
+                allowed_topics = guardrails.get("allowed_topics", [])
                 for topic in allowed_topics:
                     if topic.lower() in query_lower:
                         return False  # Query is within scope
                 
-                # Check forbidden topics 
-                forbidden_topics = scope.forbidden_topics or []
+                # Check forbidden topics from guardrails
+                forbidden_topics = guardrails.get("forbidden_topics", [])
                 for topic in forbidden_topics:
                     if topic.lower() in query_lower:
                         return True  # Query is explicitly forbidden

@@ -8,9 +8,10 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func, desc
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload, joinedload, Session
 
-from ...db import get_sync_db
+from ...db import get_db, get_sync_db
 from ...models import Tenant, Bot, Conversation, Message
 from ...schemas import ChatRequest, ChatResponse, ChatMessage
 from .auth import get_current_tenant
@@ -125,19 +126,26 @@ async def get_bot_conversations(
 async def start_conversation(
     bot_id: UUID,
     request: StartConversationRequest,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Start a new conversation with a bot."""
     
     # Verify bot belongs to tenant and is active
-    bot = db.query(Bot).options(
-        joinedload(Bot.ai_provider)
-    ).filter(
-        Bot.id == bot_id,
-        Bot.tenant_id == current_tenant.id,
-        Bot.is_active == True
-    ).first()
+    result = await db.execute(
+        select(Bot)
+        .options(
+            selectinload(Bot.ai_provider),
+            selectinload(Bot.scopes),
+            selectinload(Bot.datasets)
+        )
+        .where(
+            Bot.id == bot_id,
+            Bot.tenant_id == current_tenant.id,
+            Bot.is_active == True
+        )
+    )
+    bot = result.scalar_one_or_none()
     
     if not bot:
         raise HTTPException(
@@ -161,7 +169,7 @@ async def start_conversation(
     )
     
     db.add(conversation)
-    db.flush()  # Get the ID without committing
+    await db.flush()  # Get the ID without committing
     
     # Use the existing chat service to handle the message
     from ...services.chat_service import ChatService
@@ -214,7 +222,7 @@ async def start_conversation(
     
     db.add(user_msg)
     db.add(bot_msg)
-    db.commit()
+    await db.commit()
     
     return StartConversationResponse(
         conversation_id=str(conversation.id),
@@ -234,16 +242,21 @@ async def start_conversation(
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 async def get_conversation_messages(
     conversation_id: UUID,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Get all messages in a conversation."""
     
     # Verify conversation belongs to tenant
-    conversation = db.query(Conversation).join(Bot).filter(
-        Conversation.id == conversation_id,
-        Bot.tenant_id == current_tenant.id
-    ).first()
+    result = await db.execute(
+        select(Conversation)
+        .join(Bot)
+        .where(
+            Conversation.id == conversation_id,
+            Bot.tenant_id == current_tenant.id
+        )
+    )
+    conversation = result.scalar_one_or_none()
     
     if not conversation:
         raise HTTPException(
@@ -252,9 +265,12 @@ async def get_conversation_messages(
         )
     
     # Get messages
-    messages = db.query(Message).filter(
-        Message.conversation_id == conversation_id
-    ).order_by(Message.sequence_number).all()
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.sequence_number)
+    )
+    messages = result.scalars().all()
     
     return [
         MessageResponse(
@@ -274,21 +290,27 @@ async def get_conversation_messages(
 async def send_message(
     conversation_id: UUID,
     request: SendMessageRequest,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Send a message to an existing conversation."""
     
     # Verify conversation belongs to tenant
-    conversation = db.query(Conversation).options(
-        joinedload(Conversation.bot).joinedload(Bot.ai_provider),
-        joinedload(Conversation.bot).joinedload(Bot.scopes),
-        joinedload(Conversation.bot).joinedload(Bot.datasets)
-    ).join(Bot).filter(
-        Conversation.id == conversation_id,
-        Bot.tenant_id == current_tenant.id,
-        Conversation.is_active == True
-    ).first()
+    result = await db.execute(
+        select(Conversation)
+        .options(
+            selectinload(Conversation.bot).selectinload(Bot.ai_provider),
+            selectinload(Conversation.bot).selectinload(Bot.scopes),
+            selectinload(Conversation.bot).selectinload(Bot.datasets)
+        )
+        .join(Bot)
+        .where(
+            Conversation.id == conversation_id,
+            Bot.tenant_id == current_tenant.id,
+            Conversation.is_active == True
+        )
+    )
+    conversation = result.scalar_one_or_none()
     
     if not conversation:
         raise HTTPException(
@@ -305,9 +327,12 @@ async def send_message(
         )
     
     # Get conversation history
-    messages = db.query(Message).filter(
-        Message.conversation_id == conversation_id
-    ).order_by(Message.sequence_number).all()
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.sequence_number)
+    )
+    messages = result.scalars().all()
     
     # Convert to chat messages
     chat_messages = [
@@ -342,9 +367,13 @@ async def send_message(
     )
     
     # Get next sequence numbers
-    last_message = db.query(Message).filter(
-        Message.conversation_id == conversation_id
-    ).order_by(desc(Message.sequence_number)).first()
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(desc(Message.sequence_number))
+        .limit(1)
+    )
+    last_message = result.scalar_one_or_none()
     
     next_seq = (last_message.sequence_number + 1) if last_message else 1
     
@@ -374,7 +403,7 @@ async def send_message(
     # Update conversation timestamp
     conversation.updated_at = datetime.utcnow()
     
-    db.commit()
+    await db.commit()
     
     return MessageResponse(
         id=str(bot_msg.id),
@@ -391,7 +420,7 @@ async def send_message(
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
     conversation_id: UUID,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Delete a conversation."""
@@ -486,7 +515,7 @@ async def update_conversation_title(
 @router.post("/conversations/{conversation_id}/regenerate-title", response_model=RegenerateTitleResponse)
 async def regenerate_conversation_title(
     conversation_id: UUID,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Automatically regenerate conversation title using AI."""
@@ -566,9 +595,7 @@ async def regenerate_conversation_title(
 
 @router.post("/conversations/regenerate-titles-batch")
 async def regenerate_titles_batch(
-    conversation_ids: List[UUID],
-    db: Session = Depends(get_sync_db),
-    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
 ):
     """Regenerate titles for multiple conversations in batch."""
     

@@ -26,6 +26,8 @@ export const useCreateBot = (): UseCreateBotReturn => {
     allowed_domains: [],
     dataset_ids: [],
     scope_ids: [],
+    guardrails: {},
+    dataset_filters: {},
   });
 
   // Data state

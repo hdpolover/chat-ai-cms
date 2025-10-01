@@ -9,12 +9,15 @@ import {
   Stack,
 } from '@mui/material';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import TenantLayout from '@/components/layout/TenantLayout';
 import { useBotDetails } from '@/hooks/useBotDetails';
 import { 
   BotDetailsHeader,
   BotOverviewCard,
   BotStatsCard,
   BotConfigurationCard,
+  BotGuardrailsCard,
+  BotDatasetFiltersCard,
   BotConversationsCard
 } from '@/components/bots/details';
 
@@ -73,36 +76,46 @@ export default function BotDetailsPage() {
 
   return (
     <ProtectedRoute>
-      <Box sx={{ p: 3 }}>
-        <BotDetailsHeader
-          bot={bot}
-          onEdit={handleEdit}
-          onDelete={handleDeleteBot}
-          onToggleStatus={handleToggleStatus}
-        />
+      <TenantLayout>
+        <Box sx={{ p: 3 }}>
+          <BotDetailsHeader
+            bot={bot}
+            onEdit={handleEdit}
+            onDelete={handleDeleteBot}
+            onToggleStatus={handleToggleStatus}
+          />
 
-        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' } }}>
-          {/* Left Column */}
-          <Stack spacing={3}>
-            <BotOverviewCard bot={bot} aiProvider={aiProvider || undefined} />
-            <BotConfigurationCard bot={bot} aiProvider={aiProvider || undefined} />
-          </Stack>
+        <Stack spacing={3}>
+          {/* Basic Information */}
+          <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' } }}>
+            {/* Left Column */}
+            <Stack spacing={3}>
+              <BotOverviewCard bot={bot} aiProvider={aiProvider || undefined} />
+              <BotConfigurationCard bot={bot} aiProvider={aiProvider || undefined} />
+            </Stack>
 
-          {/* Right Column */}
-          <Stack spacing={3}>
-            <BotStatsCard
-              conversationCount={conversations.length}
-              messageCount={totalMessages}
-              averageResponseTime={averageResponseTime}
-              lastUsed={lastUsed}
-            />
-            <BotConversationsCard
-              conversations={conversations}
-              loading={loading}
-              onViewConversation={handleViewConversation}
-            />
-          </Stack>
-        </Box>
+            {/* Right Column */}
+            <Stack spacing={3}>
+              <BotStatsCard
+                conversationCount={conversations.length}
+                messageCount={totalMessages}
+                averageResponseTime={averageResponseTime}
+                lastUsed={lastUsed}
+              />
+              <BotConversationsCard
+                conversations={conversations}
+                loading={loading}
+                onViewConversation={handleViewConversation}
+              />
+            </Stack>
+          </Box>
+
+          {/* Advanced Configuration */}
+          <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' } }}>
+            <BotGuardrailsCard bot={bot} />
+            <BotDatasetFiltersCard bot={bot} />
+          </Box>
+        </Stack>
 
         {/* Success Snackbar */}
         <Snackbar
@@ -125,7 +138,8 @@ export default function BotDetailsPage() {
             {error}
           </Alert>
         </Snackbar>
-      </Box>
+        </Box>
+      </TenantLayout>
     </ProtectedRoute>
   );
 }

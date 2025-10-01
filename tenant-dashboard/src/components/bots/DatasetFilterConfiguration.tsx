@@ -214,11 +214,11 @@ const DatasetFilterConfiguration: React.FC<DatasetFilterConfigurationProps> = ({
       </Accordion>
 
       {/* Category Filters */}
-      <Accordion>
+      <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <CategoryIcon sx={{ mr: 1 }} />
-            <Typography variant="subtitle1">Category Filters</Typography>
+            <Typography variant="subtitle1">Category Filters ({datasetFilters.categories?.length || 0})</Typography>
             <Tooltip title="Filter datasets by categories for more organized content access">
               <InfoIcon sx={{ ml: 1, fontSize: 16, color: 'text.secondary' }} />
             </Tooltip>
@@ -277,7 +277,7 @@ const DatasetFilterConfiguration: React.FC<DatasetFilterConfigurationProps> = ({
       </Accordion>
 
       {/* Content Patterns */}
-      <Accordion>
+      <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <StorageIcon sx={{ mr: 1 }} />
@@ -367,7 +367,7 @@ const DatasetFilterConfiguration: React.FC<DatasetFilterConfigurationProps> = ({
       </Accordion>
 
       {/* Metadata Filters */}
-      <Accordion>
+      <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <FilterIcon sx={{ mr: 1 }} />

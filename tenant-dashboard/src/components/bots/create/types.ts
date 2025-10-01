@@ -8,6 +8,8 @@ import { Dataset } from '@/services/dataset';
 export interface CreateBotFormData extends CreateBotRequest {
   dataset_ids?: string[];
   scope_ids?: string[];
+  guardrails?: any;
+  dataset_filters?: any;
 }
 
 export interface CreateBotStepperProps {
@@ -59,6 +61,19 @@ export interface CreateBotNavigationProps {
   onBack: () => void;
   onNext: () => void;
   onCreate: () => void;
+}
+
+export interface GuardrailsStepProps {
+  botData: CreateBotFormData;
+  availableDatasets: Dataset[];
+  onChange: (data: Partial<CreateBotFormData>) => void;
+}
+
+export interface AdvancedConfigStepProps {
+  botData: CreateBotFormData;
+  availableDatasets: Dataset[];
+  availableScopes: any[];
+  onChange: (data: Partial<CreateBotFormData>) => void;
 }
 
 export interface UseCreateBotReturn {

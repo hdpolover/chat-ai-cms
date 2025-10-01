@@ -188,7 +188,7 @@ const ScopeConfiguration: React.FC<ScopeConfigurationProps> = ({
         
         {unselectedScopes.length === 0 ? (
           <Alert severity="info">
-            All available scopes are selected. Create a custom scope or deselect existing ones to add more.
+            No additional scopes available to select. You can create custom scopes using the "Create Custom Scope" button above, or switch to the "Selected Scopes" tab to manage existing ones.
           </Alert>
         ) : (
           <List>
@@ -280,7 +280,7 @@ const ScopeConfiguration: React.FC<ScopeConfigurationProps> = ({
         
         {selectedScopeIds.length === 0 ? (
           <Alert severity="info">
-                      Switch to the Available Scopes tab to select scope templates.
+            No scopes selected. Switch to the "Available Scopes" tab to select scope templates, or create custom scopes to define bot behavior patterns.
           </Alert>
         ) : (
           <List>

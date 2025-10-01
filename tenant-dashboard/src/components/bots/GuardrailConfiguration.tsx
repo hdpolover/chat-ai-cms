@@ -216,7 +216,7 @@ const GuardrailConfiguration: React.FC<GuardrailConfigurationProps> = ({
       </Accordion>
 
       {/* Knowledge Boundaries */}
-      <Accordion>
+      <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <SettingsIcon sx={{ mr: 1 }} />
@@ -307,7 +307,7 @@ const GuardrailConfiguration: React.FC<GuardrailConfigurationProps> = ({
       </Accordion>
 
       {/* Response Guidelines */}
-      <Accordion>
+      <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <SettingsIcon sx={{ mr: 1 }} />
