@@ -33,7 +33,7 @@ export class BotService {
   // Get a specific bot by ID
   static async getBot(botId: string): Promise<Bot> {
     try {
-      const response = await apiClient.get<Bot>(`${CONFIG.API.TENANT_BOTS}/${botId}`);
+      const response = await apiClient.get<Bot>(CONFIG.API.TENANT_BOT_BY_ID(botId));
       if (!response) {
         throw new Error('Bot not found');
       }
@@ -61,7 +61,7 @@ export class BotService {
   // Update an existing bot
   static async updateBot(botId: string, updates: UpdateBotRequest): Promise<Bot> {
     try {
-      const response = await apiClient.put<Bot>(`${CONFIG.API.TENANT_BOTS}/${botId}`, updates);
+      const response = await apiClient.put<Bot>(CONFIG.API.TENANT_BOT_BY_ID(botId), updates);
       if (!response) {
         throw new Error('Failed to update bot');
       }
@@ -75,7 +75,7 @@ export class BotService {
   // Delete a bot
   static async deleteBot(botId: string): Promise<void> {
     try {
-      await apiClient.delete(`${CONFIG.API.TENANT_BOTS}/${botId}`);
+      await apiClient.delete(CONFIG.API.TENANT_BOT_BY_ID(botId));
     } catch (error) {
       console.error(`Failed to delete bot ${botId}:`, error);
       throw error;
@@ -108,7 +108,7 @@ export class BotService {
           name: string;
           conversation_count: number;
         }>;
-      }>('/v1/tenant/bots/statistics/overview');
+      }>(CONFIG.API.TENANT_BOTS_STATISTICS);
       
       return response || {
         total_bots: 0,
@@ -125,7 +125,7 @@ export class BotService {
   // Get tenant AI providers
   static async getTenantAIProviders(): Promise<TenantAIProvider[]> {
     try {
-      const response = await apiClient.get<TenantAIProvider[]>('/v1/tenant/ai-providers');
+      const response = await apiClient.get<TenantAIProvider[]>(CONFIG.API.TENANT_AI_PROVIDERS);
       return response || [];
     } catch (error) {
       console.error('Failed to fetch tenant AI providers:', error);
@@ -148,7 +148,7 @@ export class BotService {
         description?: string;
         guardrails?: Record<string, any>;
         is_active: boolean;
-      }>>(`/v1/tenant/bots/${botId}/scopes`);
+      }>>(CONFIG.API.TENANT_BOT_SCOPES(botId));
       
       // Transform guardrails to config for compatibility
       return response.map(scope => ({
@@ -166,7 +166,7 @@ export class BotService {
    */
   static async getBotConversations(botId: string): Promise<ChatSession[]> {
     try {
-      const response = await apiClient.get<any[]>(`/v1/tenant/bots/${botId}/conversations`);
+      const response = await apiClient.get<any[]>(CONFIG.API.TENANT_BOT_CONVERSATIONS(botId));
       return response.map(conv => ({
         id: conv.id,
         bot_id: conv.bot_id,
@@ -199,7 +199,7 @@ export class BotService {
         provider_type: string;
         config?: Record<string, any>;
         is_configured: boolean;
-      }>>('/v1/tenant/ai-providers/global/available');
+      }>>(CONFIG.API.TENANT_AI_PROVIDERS_GLOBAL_AVAILABLE);
       return response || [];
     } catch (error) {
       console.error('Failed to fetch available global providers:', error);

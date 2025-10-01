@@ -68,7 +68,7 @@ export class ConversationService {
 
   async getConversationById(id: string): Promise<ConversationWithDetails | null> {
     try {
-      const conversation = await apiClient.get<any>(`${CONFIG.API.TENANT_CHATS}/${id}`);
+      const conversation = await apiClient.get<any>(CONFIG.API.TENANT_CHAT_BY_ID(id));
       return conversation;
     } catch (error) {
       console.error('Error fetching conversation:', error);
@@ -79,7 +79,7 @@ export class ConversationService {
   async getConversationMessages(conversationId: string): Promise<Message[]> {
     try {
       // This endpoint might need to be created in the backend
-      return await apiClient.get<Message[]>(`${CONFIG.API.TENANT_CHATS}/${conversationId}/messages`);
+      return await apiClient.get<Message[]>(CONFIG.API.TENANT_CHAT_MESSAGES(conversationId));
     } catch (error) {
       console.error('Error fetching conversation messages:', error);
       return [];
@@ -88,7 +88,7 @@ export class ConversationService {
 
   async deleteConversation(id: string): Promise<boolean> {
     try {
-      await apiClient.delete(`${CONFIG.API.TENANT_CHATS}/${id}`);
+      await apiClient.delete(CONFIG.API.TENANT_CHAT_BY_ID(id));
       return true;
     } catch (error) {
       console.error('Error deleting conversation:', error);

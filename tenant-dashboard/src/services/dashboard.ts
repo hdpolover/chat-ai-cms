@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { CONFIG } from '@/config';
+import { CONFIG, Endpoints } from '@/config';
 
 export interface TenantStats {
   totalBots: number;
@@ -44,19 +44,19 @@ export interface Document {
 
 export class TenantDashboardService {
   async getStats(): Promise<TenantStats> {
-    return apiClient.get<TenantStats>('/v1/tenant/dashboard/stats');
+    return apiClient.get<TenantStats>(CONFIG.API.TENANT_DASHBOARD_STATS);
   }
 
   async getRecentBots(limit = 5): Promise<Bot[]> {
-    return apiClient.get<Bot[]>(`${CONFIG.API.TENANT_BOTS}?limit=${limit}&order_by=updated_at&order=desc`);
+    return apiClient.get<Bot[]>(Endpoints.Dashboard.recentBots({ limit }));
   }
 
   async getRecentConversations(limit = 10): Promise<Conversation[]> {
-    return apiClient.get<Conversation[]>(`${CONFIG.API.TENANT_CHATS}?limit=${limit}&order_by=created_at&order=desc`);
+    return apiClient.get<Conversation[]>(Endpoints.Dashboard.recentConversations({ limit }));
   }
 
   async getRecentDocuments(limit = 5): Promise<Document[]> {
-    return apiClient.get<Document[]>(`${CONFIG.API.TENANT_DOCUMENTS}?limit=${limit}&order_by=created_at&order=desc`);
+    return apiClient.get<Document[]>(Endpoints.Dashboard.recentDocuments({ limit }));
   }
 }
 

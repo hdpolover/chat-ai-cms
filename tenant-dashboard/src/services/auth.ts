@@ -6,7 +6,7 @@ export class AuthService {
   // Login
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>(
-      `${CONFIG.API.TENANT_AUTH}/login`,
+      CONFIG.API.TENANT_AUTH_LOGIN,
       credentials
     );
     
@@ -22,7 +22,7 @@ export class AuthService {
   // Logout
   async logout(): Promise<void> {
     try {
-      await apiClient.post(`${CONFIG.API.TENANT_AUTH}/logout`);
+      await apiClient.post(CONFIG.API.TENANT_AUTH_LOGOUT);
     } catch (error) {
       // Continue with logout even if API call fails
       console.error('Logout API call failed:', error);
@@ -38,7 +38,7 @@ export class AuthService {
 
   // Get current user
   async getCurrentUser(): Promise<TenantUser> {
-    return apiClient.get<TenantUser>(`${CONFIG.API.TENANT_AUTH}/me`);
+    return apiClient.get<TenantUser>(CONFIG.API.TENANT_AUTH_ME);
   }
 
   // Check if user is authenticated
@@ -71,7 +71,7 @@ export class AuthService {
   // Refresh token
   async refreshToken(): Promise<string> {
     const response = await apiClient.post<{ access_token: string }>(
-      `${CONFIG.API.TENANT_AUTH}/refresh`
+      CONFIG.API.TENANT_AUTH_REFRESH
     );
     
     if (response.access_token) {

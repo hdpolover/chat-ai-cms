@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { CONFIG } from '@/config';
 import { 
   TenantAIProvider, 
   GlobalAIProvider, 
@@ -15,7 +16,7 @@ export class AIProviderService {
       const searchParams = new URLSearchParams();
       if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
       
-      const url = `/v1/tenant/ai-providers${searchParams.toString() ? `?${searchParams}` : ''}`;
+      const url = `${CONFIG.API.TENANT_AI_PROVIDERS}${searchParams.toString() ? `?${searchParams}` : ''}`;
       const response = await apiClient.get<TenantAIProvider[]>(url);
       return response || [];
     } catch (error) {
@@ -27,7 +28,7 @@ export class AIProviderService {
   // Get a specific tenant AI provider by ID
   static async getTenantAIProvider(providerId: string): Promise<TenantAIProvider> {
     try {
-      const response = await apiClient.get<TenantAIProvider>(`/v1/tenant/ai-providers/${providerId}`);
+      const response = await apiClient.get<TenantAIProvider>(CONFIG.API.TENANT_AI_PROVIDER_BY_ID(providerId));
       if (!response) {
         throw new Error('AI provider not found');
       }
@@ -41,7 +42,7 @@ export class AIProviderService {
   // Create a new tenant AI provider
   static async createTenantAIProvider(data: CreateTenantAIProviderRequest): Promise<TenantAIProvider> {
     try {
-      const response = await apiClient.post<TenantAIProvider>('/v1/tenant/ai-providers', data);
+      const response = await apiClient.post<TenantAIProvider>(CONFIG.API.TENANT_AI_PROVIDERS, data);
       if (!response) {
         throw new Error('Failed to create AI provider');
       }
@@ -55,7 +56,7 @@ export class AIProviderService {
   // Update an existing tenant AI provider
   static async updateTenantAIProvider(providerId: string, updates: UpdateTenantAIProviderRequest): Promise<TenantAIProvider> {
     try {
-      const response = await apiClient.put<TenantAIProvider>(`/v1/tenant/ai-providers/${providerId}`, updates);
+      const response = await apiClient.put<TenantAIProvider>(CONFIG.API.TENANT_AI_PROVIDER_BY_ID(providerId), updates);
       if (!response) {
         throw new Error('Failed to update AI provider');
       }
@@ -69,7 +70,7 @@ export class AIProviderService {
   // Delete a tenant AI provider
   static async deleteTenantAIProvider(providerId: string): Promise<void> {
     try {
-      await apiClient.delete(`/v1/tenant/ai-providers/${providerId}`);
+      await apiClient.delete(CONFIG.API.TENANT_AI_PROVIDER_BY_ID(providerId));
     } catch (error) {
       console.error(`Failed to delete AI provider ${providerId}:`, error);
       throw error;
@@ -84,7 +85,7 @@ export class AIProviderService {
   // Get available global providers
   static async getAvailableGlobalProviders(): Promise<GlobalAIProvider[]> {
     try {
-      const response = await apiClient.get<GlobalAIProvider[]>('/v1/tenant/ai-providers/global/available');
+      const response = await apiClient.get<GlobalAIProvider[]>(CONFIG.API.TENANT_AI_PROVIDERS_GLOBAL_AVAILABLE);
       return response || [];
     } catch (error) {
       console.error('Failed to fetch available global providers:', error);

@@ -48,7 +48,7 @@ export class DocumentService {
   // Get all datasets for the tenant
   static async getDatasets(): Promise<Dataset[]> {
     try {
-      const response = await apiClient.get<ApiResponse<Dataset[]>>(`${CONFIG.API.TENANT_DOCUMENTS}/datasets`);
+      const response = await apiClient.get<ApiResponse<Dataset[]>>(CONFIG.API.TENANT_DOCUMENTS_DATASETS);
       return response.data || [];
     } catch (error) {
       console.error('Failed to fetch datasets:', error);
@@ -59,7 +59,7 @@ export class DocumentService {
   // Get a specific document by ID
   static async getDocument(documentId: string): Promise<Document> {
     try {
-      const response = await apiClient.get<ApiResponse<Document>>(`${CONFIG.API.TENANT_DOCUMENTS}/${documentId}`);
+      const response = await apiClient.get<ApiResponse<Document>>(CONFIG.API.TENANT_DOCUMENT_BY_ID(documentId));
       if (!response.data) {
         throw new Error('Document not found');
       }
@@ -81,7 +81,7 @@ export class DocumentService {
       }
 
       const response = await apiClient.upload<ApiResponse<Document>>(
-        `${CONFIG.API.TENANT_DOCUMENTS}/upload`,
+        CONFIG.API.TENANT_DOCUMENT_UPLOAD,
         formData
       );
       
@@ -98,7 +98,7 @@ export class DocumentService {
   // Delete a document
   static async deleteDocument(documentId: string): Promise<void> {
     try {
-      await apiClient.delete(`${CONFIG.API.TENANT_DOCUMENTS}/${documentId}`);
+      await apiClient.delete(CONFIG.API.TENANT_DOCUMENT_BY_ID(documentId));
     } catch (error) {
       console.error(`Failed to delete document ${documentId}:`, error);
       throw error;
@@ -108,7 +108,7 @@ export class DocumentService {
   // Create a new dataset
   static async createDataset(name: string, description: string, tags: string[] = []): Promise<Dataset> {
     try {
-      const response = await apiClient.post<ApiResponse<Dataset>>(`${CONFIG.API.TENANT_DOCUMENTS}/datasets`, {
+      const response = await apiClient.post<ApiResponse<Dataset>>(CONFIG.API.TENANT_DOCUMENTS_DATASETS, {
         name,
         description,
         tags,
@@ -126,7 +126,7 @@ export class DocumentService {
   // Delete a dataset
   static async deleteDataset(datasetId: string): Promise<void> {
     try {
-      await apiClient.delete(`${CONFIG.API.TENANT_DOCUMENTS}/datasets/${datasetId}`);
+      await apiClient.delete(CONFIG.API.TENANT_DOCUMENTS_DATASET_BY_ID(datasetId));
     } catch (error) {
       console.error(`Failed to delete dataset ${datasetId}:`, error);
       throw error;
@@ -136,7 +136,7 @@ export class DocumentService {
   // Get document processing status
   static async getProcessingStatus(documentId: string): Promise<{ status: string; progress: number; message?: string }> {
     try {
-      const response = await apiClient.get<ApiResponse<any>>(`${CONFIG.API.TENANT_DOCUMENTS}/${documentId}/status`);
+      const response = await apiClient.get<ApiResponse<any>>(CONFIG.API.TENANT_DOCUMENT_STATUS(documentId));
       return response.data || { status: 'unknown', progress: 0 };
     } catch (error) {
       console.error(`Failed to fetch processing status for ${documentId}:`, error);
@@ -147,7 +147,7 @@ export class DocumentService {
   // Download a document
   static async downloadDocument(documentId: string): Promise<Blob> {
     try {
-      const response = await apiClient.get(`${CONFIG.API.TENANT_DOCUMENTS}/${documentId}/download`, {
+      const response = await apiClient.get(CONFIG.API.TENANT_DOCUMENT_DOWNLOAD(documentId), {
         responseType: 'blob',
       });
       return response as Blob;

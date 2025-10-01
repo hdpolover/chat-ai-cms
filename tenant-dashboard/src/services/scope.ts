@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { CONFIG } from '@/config';
 import { CreateScopeRequest, UpdateScopeRequest, ScopeResponse } from '@/types';
 
 export class ScopeService {
@@ -7,7 +8,7 @@ export class ScopeService {
    */
   static async getBotScopes(botId: string): Promise<ScopeResponse[]> {
     try {
-      const response = await apiClient.get<ScopeResponse[]>(`/v1/tenant/bots/${botId}/scopes`);
+      const response = await apiClient.get<ScopeResponse[]>(CONFIG.API.TENANT_BOT_SCOPES(botId));
       return response || [];
     } catch (error) {
       console.error('Failed to fetch bot scopes:', error);
@@ -21,7 +22,7 @@ export class ScopeService {
    */
   static async getBotScope(botId: string, scopeId: string): Promise<ScopeResponse> {
     try {
-      const response = await apiClient.get<ScopeResponse>(`/v1/tenant/bots/${botId}/scopes/${scopeId}`);
+      const response = await apiClient.get<ScopeResponse>(CONFIG.API.TENANT_BOT_SCOPE_BY_ID(botId, scopeId));
       return response;
     } catch (error) {
       console.error('Failed to fetch bot scope:', error);
@@ -34,7 +35,7 @@ export class ScopeService {
    */
   static async createBotScope(botId: string, scopeData: CreateScopeRequest): Promise<ScopeResponse> {
     try {
-      const response = await apiClient.post<ScopeResponse>(`/v1/tenant/bots/${botId}/scopes`, scopeData);
+      const response = await apiClient.post<ScopeResponse>(CONFIG.API.TENANT_BOT_SCOPES(botId), scopeData);
       return response;
     } catch (error) {
       console.error('Failed to create bot scope:', error);
@@ -51,7 +52,7 @@ export class ScopeService {
     scopeData: UpdateScopeRequest
   ): Promise<ScopeResponse> {
     try {
-      const response = await apiClient.put<ScopeResponse>(`/v1/tenant/bots/${botId}/scopes/${scopeId}`, scopeData);
+      const response = await apiClient.put<ScopeResponse>(CONFIG.API.TENANT_BOT_SCOPE_BY_ID(botId, scopeId), scopeData);
       return response;
     } catch (error) {
       console.error('Failed to update bot scope:', error);
@@ -64,7 +65,7 @@ export class ScopeService {
    */
   static async deleteBotScope(botId: string, scopeId: string): Promise<void> {
     try {
-      await apiClient.delete(`/v1/tenant/bots/${botId}/scopes/${scopeId}`);
+      await apiClient.delete(CONFIG.API.TENANT_BOT_SCOPE_BY_ID(botId, scopeId));
     } catch (error) {
       console.error('Failed to delete bot scope:', error);
       throw error;

@@ -38,6 +38,7 @@ import {
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import TenantLayout from '@/components/layout/TenantLayout';
 import { apiClient } from '@/services/api';
+import { CONFIG } from '@/config';
 
 interface Message {
   id: string;
@@ -161,7 +162,7 @@ export default function ChatPage() {
   const loadBots = async () => {
     try {
       setBotsLoading(true);
-      const botsData = await apiClient.get<Bot[]>('/v1/tenant/bots');
+      const botsData = await apiClient.get<Bot[]>(CONFIG.API.TENANT_BOTS);
       setBots(botsData);
       
       // Auto-select first active bot
@@ -183,7 +184,7 @@ export default function ChatPage() {
     try {
       // Load recent conversations for this bot
       const conversationsData = await apiClient.get<Conversation[]>(
-        `/v1/tenant/bots/${selectedBot.id}/conversations`
+        CONFIG.API.TENANT_BOT_CONVERSATIONS(selectedBot.id)
       );
       setConversations(conversationsData);
       
@@ -208,7 +209,7 @@ export default function ChatPage() {
   const loadConversationMessages = async (conversationId: string) => {
     try {
       const messagesData = await apiClient.get<Message[]>(
-        `/v1/tenant/conversations/${conversationId}/messages`
+        CONFIG.API.TENANT_CONVERSATION_MESSAGES(conversationId)
       );
       setMessages(messagesData);
     } catch (err) {
@@ -248,13 +249,13 @@ export default function ChatPage() {
       if (currentConversation) {
         // Continue existing conversation
         response = await apiClient.post<ChatResponse>(
-          `/v1/tenant/conversations/${currentConversation.id}/messages`,
+          CONFIG.API.TENANT_CONVERSATION_MESSAGES(currentConversation.id),
           { message: userMessage.content }
         );
       } else {
         // Start new conversation
         response = await apiClient.post<ChatResponse>(
-          `/v1/tenant/bots/${selectedBot.id}/conversations`,
+          CONFIG.API.TENANT_BOT_NEW_CONVERSATION(selectedBot.id),
           { 
             message: userMessage.content,
             metadata: {

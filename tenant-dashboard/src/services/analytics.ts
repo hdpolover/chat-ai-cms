@@ -53,7 +53,7 @@ export class AnalyticsService {
   // Get dashboard overview stats
   static async getDashboardStats(): Promise<DashboardStats> {
     try {
-      const response = await apiClient.get<ApiResponse<DashboardStats>>(`${CONFIG.API.TENANT_ANALYTICS}/dashboard`);
+      const response = await apiClient.get<ApiResponse<DashboardStats>>(CONFIG.API.TENANT_ANALYTICS_DASHBOARD);
       return response.data || {
         totalBots: 0,
         activeBots: 0,
@@ -99,7 +99,7 @@ export class AnalyticsService {
   // Get usage analytics with detailed metrics
   static async getUsageAnalytics(timeRange: 'day' | 'week' | 'month' | 'year' = 'week'): Promise<UsageAnalytics> {
     try {
-      const response = await apiClient.get<ApiResponse<UsageAnalytics>>(`${CONFIG.API.TENANT_ANALYTICS}/usage`, {
+      const response = await apiClient.get<ApiResponse<UsageAnalytics>>(CONFIG.API.TENANT_ANALYTICS_USAGE, {
         time_range: timeRange,
       });
       return response.data || {
@@ -118,7 +118,7 @@ export class AnalyticsService {
   // Get bot-specific analytics
   static async getBotAnalytics(botId: string, timeRange: 'day' | 'week' | 'month' | 'year' = 'week'): Promise<BotPerformance & { dailyMetrics: ConversationMetrics[] }> {
     try {
-      const response = await apiClient.get<ApiResponse<any>>(`${CONFIG.API.TENANT_ANALYTICS}/bots/${botId}`, {
+      const response = await apiClient.get<ApiResponse<any>>(CONFIG.API.TENANT_ANALYTICS_BOTS(botId), {
         time_range: timeRange,
       });
       return response.data || {
@@ -141,7 +141,7 @@ export class AnalyticsService {
   // Get conversation trends
   static async getConversationTrends(timeRange: 'day' | 'week' | 'month' | 'year' = 'week'): Promise<ConversationMetrics[]> {
     try {
-      const response = await apiClient.get<ApiResponse<ConversationMetrics[]>>(`${CONFIG.API.TENANT_ANALYTICS}/trends`, {
+      const response = await apiClient.get<ApiResponse<ConversationMetrics[]>>(CONFIG.API.TENANT_ANALYTICS_TRENDS, {
         time_range: timeRange,
       });
       return response.data || [];
@@ -154,7 +154,7 @@ export class AnalyticsService {
   // Get top performing bots
   static async getTopBots(limit: number = 10): Promise<BotPerformance[]> {
     try {
-      const response = await apiClient.get<ApiResponse<BotPerformance[]>>(`${CONFIG.API.TENANT_ANALYTICS}/top-bots`, {
+      const response = await apiClient.get<ApiResponse<BotPerformance[]>>(CONFIG.API.TENANT_ANALYTICS_TOP_BOTS, {
         limit,
       });
       return response.data || [];
@@ -170,7 +170,7 @@ export class AnalyticsService {
     format: 'csv' | 'json' = 'csv'
   ): Promise<Blob> {
     try {
-      const response = await apiClient.get(`${CONFIG.API.TENANT_ANALYTICS}/export`, {
+      const response = await apiClient.get(CONFIG.API.TENANT_ANALYTICS_EXPORT, {
         time_range: timeRange,
         format,
         responseType: 'blob',
