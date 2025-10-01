@@ -395,7 +395,9 @@ class ChatService:
                 context_parts.append(f"Expertise Areas: {', '.join(scope_descriptions)}")
             
             # Add knowledge base information
-            # Knowledge base context will be added in future enhancement
+            kb_info = await self._get_knowledge_base_summary(bot)
+            if kb_info:
+                context_parts.append(f"Knowledge Base Contains: {kb_info}")
             
             # Create a prompt for generating the refusal message
             refusal_prompt = f"""You are {bot.name}, a helpful AI assistant with a specialized knowledge base. A user asked: "{user_query}"
@@ -460,6 +462,42 @@ Generate a natural, conversational refusal message that guides the user toward y
         return enhanced
     
     async def _get_knowledge_base_summary(self, bot: Bot) -> str:
+        """Get a summary of what's in the bot's knowledge base for context."""
+        try:
+            # Get dataset titles and document counts for this bot
+            if not bot.datasets:
+                return ""
+            
+            dataset_info = []
+            for dataset in bot.datasets[:3]:  # Limit to first 3 datasets
+                # Get document count
+                result = await self.db.execute(
+                    select(func.count(Document.id))
+                    .where(Document.dataset_id == dataset.id)
+                )
+                doc_count = result.scalar() or 0
+                
+                if doc_count > 0:
+                    dataset_info.append(f"{dataset.name} ({doc_count} documents)")
+            
+            if dataset_info:
+                return f"documents about {', '.join(dataset_info)}"
+            return ""
+            
+        except Exception as e:
+            logger.error("Error getting knowledge base summary", error=str(e), bot_id=bot.id)
+            return ""
+    
+    def _get_contextual_suggestions(self, user_query: str, allowed_topics: List[str]) -> List[str]:
+        """Generate contextual suggestions based on user query and allowed topics."""
+        query_lower = user_query.lower()
+        suggestions = []
+        
+        # If the user asked about something specific, try to redirect to similar allowed topics
+        query_keywords = [
+            "help", "information", "about", "how", "what", "why", "when", "where",
+            "explain", "tell me", "show me", "guide", "tutorial", "learn"
+        ]
         
         # Look for related topics
         for topic in allowed_topics:
